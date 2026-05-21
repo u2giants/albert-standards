@@ -7,9 +7,7 @@
 
 ## Policy
 
-Every containerized service on this server **must** have explicit memory and CPU limits defined in its Docker Compose service definition under `deploy.resources.limits`.
-
-No service should run uncapped.
+Every containerized service on this server **must** have explicit memory and CPU limits. No service should run uncapped.
 
 ---
 
@@ -25,20 +23,68 @@ See the full post-mortem: [2026-05-20 Hetzner Crash](../post-mortems/2026-05-20-
 
 ## Current Limits (as of 2026-05-21)
 
-| Service | Memory Limit | CPU Limit | Where Set | Status |
-|---|---|---|---|---|
-| twenty (server) | 1536 MiB | 2 CPUs | Docker Compose | ✅ Set |
-| twenty (worker) | 1536 MiB | 2 CPUs | Docker Compose | ✅ Set |
-| twenty-postgres | 4 GiB | 2 CPUs | Coolify UI | ✅ Set |
-| twenty-redis | 256 MiB | 0.5 CPUs | Coolify UI | ⚠️ TODO: verify still in place |
-| hiclaw-controller | — | — | — | ❌ Uncapped (~1.84 GiB observed) |
-| hiclaw-manager | — | — | — | ❌ Uncapped (~588 MB observed) |
-| minio | — | — | — | ❌ Uncapped (~680 MB RSS observed) |
-| All other services | — | — | — | ❌ Audit required |
+| Service | Memory Limit | Memory Reservation | CPU Limit | Where Set | Status |
+|---|---|---|---|---|---|
+| twenty (server + worker) | 1536 MiB | 512 MiB | 2 CPUs | Coolify UI / API | ✅ Set |
+| twenty-postgres | 4096 MiB | 2048 MiB | 2 CPUs | Coolify UI / API | ✅ Set |
+| twenty-redis | 256 MiB | 64 MiB | 0.5 CPUs | Coolify UI / API | ✅ Set |
+| hiclaw-controller | — | — | — | — | ❌ Uncapped (~1.84 GiB observed) |
+| hiclaw-manager | — | — | — | — | ❌ Uncapped (~588 MB observed) |
+| minio | — | — | — | — | ❌ Uncapped (~680 MB RSS observed) |
+| All other services | — | — | — | — | ❌ Audit required |
 
 ---
 
-## How to Set Limits in Docker Compose
+## How to Set Limits for Coolify-Managed Services
+
+### Using the Coolify UI
+
+1. Open the service in the Coolify dashboard.
+2. Go to **Resources** (or equivalent tab).
+3. Set memory limit, memory swap, memory reservation, and CPU limit.
+4. Save and redeploy.
+
+### Using the Coolify API
+
+For applications:
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limits_cpus": "2",
+    "limits_memory": "1536",
+    "limits_memory_swap": "1536",
+    "limits_memory_swappiness": 0,
+    "limits_memory_reservation": "512"
+  }' \
+  http://localhost:8000/api/v1/applications/<app-uuid>
+```
+
+For databases (postgres, redis, etc.):
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limits_cpus": "2",
+    "limits_memory": "4096",
+    "limits_memory_swap": "4096",
+    "limits_memory_swappiness": 0,
+    "limits_memory_reservation": "2048"
+  }' \
+  http://localhost:8000/api/v1/databases/<db-uuid>
+```
+
+Memory values are in **MiB integers** (not strings with suffixes).
+
+**Why this persists:** Coolify stores these limits in its own database and writes them into the compose file it generates on every deploy. Limits set this way survive redeployments. Limits added manually to the compose file on disk do not — Coolify overwrites them.
+
+---
+
+## How to Set Limits in Docker Compose (non-Coolify services)
 
 Use the `deploy.resources.limits` key (Docker Compose v2+). Example:
 
@@ -63,13 +109,6 @@ services:
 | `m` | Mebibytes (e.g. `1536m`) |
 | `g` | Gibibytes (e.g. `4g`) |
 
-### Notes
-
-- `limits` is a hard cap. The container is OOM-killed if it exceeds the memory limit.
-- `reservations` is a soft hint to the scheduler — it does not impose a cap.
-- CPU limits are in fractional CPUs (e.g. `"0.5"` = half a core).
-- Limits under `deploy` require Docker Compose v2 (the `docker compose` plugin, not the legacy `docker-compose` binary). Confirm with `docker compose version`.
-
 ---
 
 ## How to Verify Limits Are Applied
@@ -93,13 +132,11 @@ A container with `Memory = 0` from `docker inspect` has no memory limit and must
 
 ## Coolify Caveat
 
-Coolify manages its own Docker Compose files and **may regenerate them on redeploy**, overwriting any manual edits including resource limits.
+Coolify generates its own Docker Compose files and **regenerates them on every redeploy**.
 
-**Rules for Coolify-managed services:**
-
-1. Set resource limits in **Coolify's UI** (Service → Resources tab), not directly in the compose file.
-2. After every Coolify-triggered redeploy, re-verify that limits are still in place using `docker inspect` as shown above.
-3. If Coolify does not expose a resource limit field for a given service, document this and track it manually.
+- **Do not** add limits by hand-editing the Coolify-generated compose file on disk (`/data/coolify/...`). They will be overwritten.
+- **Do** use the Coolify UI or API (see above). Those values are stored in Coolify's database and written into every generated compose file.
+- After any Coolify-triggered redeploy, re-verify limits are still in place using `docker inspect` as shown above.
 
 ---
 
@@ -108,10 +145,10 @@ Coolify manages its own Docker Compose files and **may regenerate them on redepl
 Monitor `docker stats` regularly. If any container's `MemPerc` consistently exceeds **80% of its configured limit**, take action:
 
 1. Investigate the application for memory leaks or runaway workloads.
-2. If usage is legitimate and growing, raise the limit — but also raise an alert so you know headroom is shrinking.
-3. Never silently raise limits without understanding why usage increased.
+2. If usage is legitimate and growing, raise the limit — but understand why before doing so.
+3. Never silently raise limits.
 
-Consider setting up automated alerting: swap usage > 50% on the host should trigger a PagerDuty alert or equivalent.
+Consider setting up automated alerting: host swap usage > 50% should trigger a notification.
 
 ---
 
