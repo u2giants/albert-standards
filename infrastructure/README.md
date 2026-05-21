@@ -15,12 +15,14 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | Runbook | When to use |
 |---------|-------------|
 | [DNS resolution broken](runbooks/dns-resolution-broken.md) | Apps can't reach external APIs; hostnames don't resolve but IP pings work |
+| [Container resource limits](runbooks/container-resource-limits.md) | Every service must have memory/CPU limits; how to set and verify them |
 
 ## Post-Mortems
 
 | Date | Incident |
 |------|---------|
 | [2026-05-21](post-mortems/2026-05-21-cloudflared-oauth2-recovery.md) | Docker DNS cascade; cloudflared + oauth2-proxy containers recovered; Docker hardened |
+| [2026-05-20](post-mortems/2026-05-20-hetzner-crash.md) | Hetzner VPS unclean reboot; HiClaw recursive MinIO mirror (primary) + Twenty email rerouter query storm (contributing) |
 | [2026-05-20](post-mortems/2026-05-20-dns-cascade.md) | hiclaw→Twenty cascade caused DNS failure; Hetzner DNS servers unreachable |
 
 ## Server
