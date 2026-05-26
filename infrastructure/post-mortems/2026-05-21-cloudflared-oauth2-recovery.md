@@ -13,6 +13,7 @@ Following the 2026-05-20 DNS cascade (see [2026-05-20-dns-cascade.md](2026-05-20
 | 2026-05-21 00:34 | Both cloudflared Docker containers enter restart loop (same DNS error on `region1.v2.argotunnel.com`) |
 | 2026-05-21 ~00:44 | Containers manually stopped; restart policy set to `no` to halt crash loops |
 | 2026-05-21 21:54 | All containers restored, DNS hardening applied, orphan tunnel cleaned up |
+| 2026-05-26 14:22 | Tailscale DNS disabled (`tailscale set --accept-dns=false`); all containers restarted — see follow-up below |
 
 ## Root Cause
 
@@ -50,7 +51,7 @@ The three containers fail differently on startup:
    [Resolve]
    FallbackDNS=1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4
    ```
-   Docker 27+ detects that `127.0.0.53` is a loopback address and injects the real upstream DNS servers directly into container `/etc/resolv.conf`, bypassing the stub entirely. New containers now get `8.8.8.8 8.8.4.4` directly.
+   Docker 27+ detects that `127.0.0.53` is a loopback address and reads the real upstream DNS servers from resolved, injecting them as `ExtServers` in container DNS config.
 
 6. Added `dns: [1.1.1.1, 8.8.8.8]` to `/worksp/hiclaw/oauth2-proxy/docker-compose.yml`. Recreated the container to apply immediately. This is belt-and-suspenders: even if Docker's DNS resolver behavior changes, oauth2-proxy has explicit DNS.
 
@@ -65,12 +66,27 @@ The three containers fail differently on startup:
 - **`socks5-home-tunnel.service`** — remains disabled. Tailscale peer at `100.110.219.31` was unreachable as of 2026-05-20 20:36. Nothing depends on it. Re-enable only after confirming Tailscale connectivity.
 - **Coolify-managed cloudflared containers** — DNS hardening was NOT applied inside Coolify's service config because Coolify reconciliation would fight manual container changes. Mitigated by the resolved-level fix which applies to all containers automatically.
 
+## Follow-up: Incomplete fix discovered 2026-05-26
+
+The fallback-dns.conf fix above was **not fully effective** because Tailscale DNS was still enabled (`tailscale set --accept-dns=true` is the default). When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `100.100.100.100`. Docker 27+ reads this as the real upstream and injects `100.100.100.100` as `ExtServers` for all containers — overriding the fallback-dns fix.
+
+After the May 2026 DNS incident, Tailscale's resolver had no upstream configured (a persistent bug: `no upstream resolvers set, returning SERVFAIL`). This generated 130+ SERVFAIL errors per second and caused all container DNS queries to fail silently — the synology-monitor containers were in a tight retry loop resolving their Supabase hostname, flooding the broken resolver continuously from 2026-05-20 through 2026-05-26.
+
+**Additional fix applied 2026-05-26:**
+- Ran `tailscale set --accept-dns=false` — Tailscale no longer manages system DNS
+- Restarted all 14 running containers to flush the stale `100.100.100.100` ExtServer config
+- Containers now use `host(127.0.0.53)` → systemd-resolved → 1.1.1.1 (working)
+- MagicDNS (`.tail769aaf.ts.net` hostname resolution) is intentionally disabled as a result; use Tailscale IPs directly
+
+Do not re-enable Tailscale DNS. See CLAUDE.md "Things you must not do."
+
 ## Prevention
 
-The structural fix (Docker 27+ reading resolved upstreams directly + fallback DNS in resolved) means a single DNS server going down will no longer cascade into container crashes. The prior post-mortem's netplan fix (removing Hetzner DNS dependency) prevents the primary DNS from failing in the first place.
+The structural fix (Docker 27+ reading resolved upstreams directly + fallback DNS in resolved + Tailscale DNS disabled) means a single DNS server going down will no longer cascade into container crashes. The prior post-mortem's netplan fix (removing Hetzner DNS dependency) prevents the primary DNS from failing in the first place.
 
 If containers are ever found in crash loops with `127.0.0.11:53: server misbehaving`:
 ```bash
+tailscale dns status | head -3             # check if Tailscale DNS was re-enabled
 resolvectl status                          # check if upstream DNS is healthy
 sudo systemctl restart systemd-resolved   # if resolved is broken
 docker start <stopped-containers>         # after DNS is confirmed working
