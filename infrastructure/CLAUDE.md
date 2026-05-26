@@ -148,26 +148,35 @@ The host's `/etc/resolv.conf` points to `127.0.0.53` (systemd-resolved stub). Th
 
 This is what happened in the May 2026 incident: host DNS broke → Docker DNS relay broke → all Cloudflare tunnel containers and oauth2-proxy crashed in a cascade.
 
-### The fix (applied 2026-05-21)
+### The fix (four layers, fully applied as of 2026-05-26)
 
-Three layers of protection are now in place:
+1. **systemd-resolved global DNS** (`/etc/systemd/resolved.conf.d/dns.conf`):
+   ```ini
+   [Resolve]
+   DNS=1.1.1.1 8.8.8.8 9.9.9.9
+   FallbackDNS=1.0.0.1 8.8.4.4 149.112.112.112
+   ```
+   Sets Cloudflare/Google/Quad9 as global resolvers regardless of what DHCP injects. Applied 2026-05-20.
 
-1. **systemd-resolved fallback DNS** (`/etc/systemd/resolved.conf.d/fallback-dns.conf`):
+2. **systemd-resolved fallback DNS** (`/etc/systemd/resolved.conf.d/fallback-dns.conf`):
    ```
    FallbackDNS=1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4
    ```
-   If the primary upstream DNS (currently `1.1.1.1 8.8.8.8 9.9.9.9` on eth0) fails, resolved falls back to these. Most importantly: Docker 27+ detects that `127.0.0.53` is a loopback address and automatically reads the real upstream servers from resolved, injecting them directly into containers. Containers now get `8.8.8.8 8.8.4.4` in their `/etc/resolv.conf`, not `127.0.0.53`.
+   Belt-and-suspenders fallback. Docker 27+ detects that `127.0.0.53` is a loopback address and reads the real upstream servers from resolved, injecting them as `ExtServers` in container DNS config. As of 2026-05-26, containers show `ExtServers: [host(127.0.0.53)]` and resolve via systemd-resolved → 1.1.1.1. Applied 2026-05-21.
 
-2. **oauth2-proxy compose file** (`/worksp/hiclaw/oauth2-proxy/docker-compose.yml`):
+3. **oauth2-proxy compose file** (`/worksp/hiclaw/oauth2-proxy/docker-compose.yml`):
    ```yaml
    dns:
      - 1.1.1.1
      - 8.8.8.8
    ```
-   Per-container DNS bypasses the Docker relay entirely. Critical because oauth2-proxy must resolve `auth.designflow.app` at every startup to perform OIDC discovery — if this fails, the container exits immediately with code 1.
+   Per-container DNS bypasses the Docker relay entirely. Critical because oauth2-proxy must resolve `auth.designflow.app` at every startup to perform OIDC discovery — if this fails, the container exits immediately with code 1. Applied 2026-05-21.
 
-3. **Docker daemon live-restore** (`/etc/docker/daemon.json`):
-   `"live-restore": true` — containers survive Docker daemon restarts/upgrades without going down.
+4. **Tailscale DNS disabled** (`tailscale set --accept-dns=false`, applied 2026-05-26):
+   When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `100.100.100.100` (Tailscale's magic DNS address). Docker reads this as the `ExtServer` for all containers — overriding the fallback-dns fix from layer 2. After the May 2026 DNS incident, Tailscale's resolver had no upstream configured and was returning SERVFAIL for every query at 130+ errors/second. This broke all container DNS silently for 6 days despite the May 21 remediation. Disabling Tailscale DNS management means systemd-resolved handles DNS normally, and Docker reads the real upstream (1.1.1.1) instead of `100.100.100.100`. All containers were restarted on 2026-05-26 to flush the stale ExtServer config.
+   **MagicDNS is intentionally disabled on this server.** Tailscale peer hostnames (`.tail769aaf.ts.net`) are not resolvable by name. Use Tailscale IPs directly.
+
+**Docker daemon live-restore** (`/etc/docker/daemon.json`): `"live-restore": true` — containers survive Docker daemon restarts/upgrades without going down. Applied 2026-05-21.
 
 ### What to watch for
 
@@ -181,6 +190,13 @@ resolvectl status
 dig api.anthropic.com @1.1.1.1   # bypass local resolver to confirm network is up
 ```
 If the network is up but systemd-resolved is broken: `sudo systemctl restart systemd-resolved`
+
+Also check Tailscale DNS status — if someone re-enabled it, it will be intercepting DNS again:
+```bash
+tailscale dns status | head -3
+# Should say: "Tailscale DNS: disabled."
+# If it says "enabled", run: tailscale set --accept-dns=false && docker restart $(docker ps -q)
+```
 
 ---
 
@@ -239,7 +255,7 @@ Permissions required on that token: Zone Settings Edit, Zone DNS Edit, Cloudflar
 
 The `letsencrypt-dns` resolver uses the Cloudflare API. Check:
 1. The API token is still valid and has DNS Edit + Zone Settings Edit permissions.
-2. The `dynamic/coolify.yaml` routes use `certresolver: letsencrypt-dns` (not `letsencrypt`). Coolify may revert this to `letsencrypt` if you click "Restart Proxy" in the UI — reapply with: `sudo sed -i 's/certresolver: letsencrypt/certresolver: letsencrypt-dns/g' /data/coolify/proxy/dynamic/coolify.yaml`
+2. The `dynamic/coolify.yaml` routes use `certresolver: letsencrypt-dns` (not `letsencrypt`). Coolify may revert this to `letsencrypt` if you click "Restart Proxy" in the UI — reapply with: `sudo sed -i 's/certresolver: letsencrypt$/certresolver: letsencrypt-dns/' /data/coolify/proxy/dynamic/coolify.yaml`
 
 ---
 
@@ -250,14 +266,15 @@ Symptom: Many containers simultaneously logging `server misbehaving` or `lookup 
 1. Check whether the host network is up: `ping -c2 1.1.1.1` (IP, not hostname)
 2. Check systemd-resolved: `resolvectl status` — look for "DNS Servers" showing real IPs
 3. If resolved is broken: `sudo systemctl restart systemd-resolved`
-4. Containers that exited will need to be restarted:
+4. **Check Tailscale DNS is still disabled**: `tailscale dns status | head -3` — must say "Tailscale DNS: disabled." If not: `tailscale set --accept-dns=false`
+5. Containers that exited will need to be restarted:
    ```bash
    # restore restart policies if they were changed to 'no' during troubleshooting:
    docker update --restart=unless-stopped <container-id> ...
    docker start <container-id> ...
    ```
-5. For `cloudflared-coolify.service` (systemd, not Docker): `sudo systemctl start cloudflared-coolify`
-6. Do NOT blindly re-enable all disabled systemd services — only `cloudflared-coolify`. The `socks5-home-tunnel` is intentionally disabled.
+6. For `cloudflared-coolify.service` (systemd, not Docker): `sudo systemctl start cloudflared-coolify`
+7. Do NOT blindly re-enable all disabled systemd services — only `cloudflared-coolify`. The `socks5-home-tunnel` is intentionally disabled.
 
 ---
 
@@ -276,6 +293,9 @@ Coolify overwrites `certresolver: letsencrypt-dns` back to `letsencrypt`, which 
 
 **Do not add a `dns` key to daemon.json pointing at `127.0.0.53`.**
 That's the systemd-resolved stub and unreachable from containers. The daemon.json intentionally has no `dns` key; Docker 27+ reads the real upstream from resolved automatically. The fallback DNS is configured in `/etc/systemd/resolved.conf.d/fallback-dns.conf`.
+
+**Do not re-enable Tailscale DNS** (`tailscale set --accept-dns=true`).
+When Tailscale DNS is enabled, all system DNS is routed through Tailscale's internal resolver at `100.100.100.100`, and Docker injects `100.100.100.100` as the `ExtServer` for every container. If Tailscale's resolver loses its upstream configuration — which happened after the May 2026 DNS incident and is not self-healing — all container DNS breaks silently with SERVFAIL. This exact failure mode caused 6 days of broken container DNS (2026-05-20 to 2026-05-26) despite the May 21 remediation work. Tailscale DNS is deliberately disabled on this server. MagicDNS hostname resolution is the only thing lost; use Tailscale IPs directly.
 
 ---
 
