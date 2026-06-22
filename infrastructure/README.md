@@ -17,6 +17,16 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | [DNS resolution broken](runbooks/dns-resolution-broken.md) | Apps can't reach external APIs; hostnames don't resolve but IP pings work |
 | [Container resource limits](runbooks/container-resource-limits.md) | Every service must have memory/CPU limits; how to set and verify them |
 
+## Applications on this infrastructure
+
+| Application | Public hostnames | Runtime owner | Notes |
+|-------------|------------------|---------------|-------|
+| PopDAM / PopSG | `dam.designflow.app`, `sg.designflow.app` | Coolify app `qxj8a0j3tpa9lq4q5rs6pezy` on the Hetzner VPS | One `ghcr.io/u2giants/popdam-frontend:latest` image serves both hostnames; `dam` is routed by Coolify Docker labels and `sg` by `/data/coolify/proxy/dynamic/popdam-sg.yml` using the same Docker service. |
+
+When a project-specific infrastructure decision for PopDAM changes VPS, Coolify,
+Traefik, GHCR, DNS, Railway, or Synology operating assumptions, update this
+knowledgebase and the PopDAM repo docs together.
+
 ## Post-Mortems
 
 | Date | Incident |
