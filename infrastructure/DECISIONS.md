@@ -6,6 +6,23 @@ read it first — the rejected options were usually rejected for a real reason.
 
 ---
 
+## 2026-06-22 — Operational hardening of the apply pipeline (second review pass)
+
+**Decision:** Four refinements to the Ansible/CI pipeline (details in the plan):
+1. **Cloud-Init bootstrap** — on Hetzner *Cloud*, provision with a `user-data` script (create `ai`
+   user + sudo, SSH key, Python, ephemeral Tailscale up) so the box is code-defined from first boot;
+   no manual `bootstrap.sh`. (Dedicated/Robot servers use `installimage` instead — confirm product.)
+2. **Scheduled drift detection** — a daily GitHub Actions job runs `ansible-playbook --check --diff`
+   and fails+alerts on drift, catching out-of-band SSH hotfixes that merge-serialization can't.
+3. **Ephemeral, tagged Tailscale CI auth** (`tailscale/github-action`, `tag:ci`) so runner nodes
+   auto-remove from the tailnet instead of accumulating.
+4. **1Password SA-token expiry handling** — the CI service-account token can expire silently and kill
+   the whole pipeline; record its expiry and set a rotation reminder when it's created.
+**Why:** Second expert-review pass. Each closes a real failure mode (a manual bootstrap step, silent
+out-of-band drift, tailnet node sprawl, silent pipeline death on token expiry).
+**Rejected:** a manual `bootstrap.sh` as the *only* bootstrap; relying solely on merge-time
+serialization with no drift detection.
+
 ## 2026-06-22 — Ansible rollout is gated by phases; no auto-apply until proven safe
 
 **Decision:** The host-Ansible build runs in five phases with **hard gates** between them, and CI

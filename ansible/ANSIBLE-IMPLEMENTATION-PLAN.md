@@ -255,9 +255,11 @@ This is the heart of the "7 AI sessions can't collide" guarantee. Design:
      group: apply-hetzner
      cancel-in-progress: false   # queue, never run two applies simultaneously
    ```
-4. The runner reaches the server over **SSH via Tailscale** (preferred) or public IP. Use a
-   dedicated CI SSH key stored in GitHub Actions secrets (or better, a Tailscale ephemeral auth
-   key + `tailscale/github-action`).
+4. The runner reaches the server over **SSH via Tailscale** (preferred) or public IP. Use the
+   official **`tailscale/github-action`** with an **ephemeral, tagged auth key** (e.g. `tag:ci`) or a
+   Tailscale OAuth client. **Ephemeral is required** — it auto-removes the runner's node from the
+   tailnet when the job ends, so dead CI nodes don't accumulate. Restrict `tag:ci`'s ACLs to only
+   the hosts/ports CI needs (SSH to the managed servers).
 
 ### 5.2 Secrets (1Password)
 - The owner wants secrets in **1Password** (`op` CLI; vault `vibe_coding`). In CI, use the official
@@ -265,6 +267,11 @@ This is the heart of the "7 AI sessions can't collide" guarantee. Design:
   stored directly in GitHub). All other secrets (SSH key, tunnel tokens, CF API token, restic/S3
   creds) are referenced as `op://vibe_coding/<item>/<field>` and injected as env vars at apply time,
   then passed to Ansible via `--extra-vars` or `lookup('env', ...)`.
+- ⚠️ **The 1Password Service Account token can EXPIRE.** If it expires silently, the entire apply
+  pipeline (and drift detection, §5.5) fails abruptly. When you create it: note its expiry, and set a
+  **rotation reminder** a week before. (Don't schedule one yet — the token doesn't exist until the
+  pipeline is built; create the reminder at that point.) Also confirm the SA is scoped to *only* the
+  `vibe_coding` vault (it already is for the local `op` CLI).
 - **This is its own gated phase (Phase 3, §9), not a side task.** Secrets are NOT yet in 1Password —
   they live in plaintext `.env` files and configs, and one was even embedded in a git remote. Migrate
   them **one at a time**, each with a validation and a rollback, working down the inventory below.
@@ -292,12 +299,35 @@ node is **ephemeral/external** (survives the server dying — critical for rebui
 serializes** applies, it **scales to N servers** via inventory, and it keeps the **truth in git**.
 On-box Ansible was rejected (chicken-and-egg on rebuild, no serialization). Honor this choice.
 
-### 5.4 First-boot bootstrap
-A brand-new server can't be reached by CI until it has an SSH user + key + Tailscale. Provide a
-small `bootstrap.sh` (or a separate minimal playbook run once from a laptop) that: creates the `ai`
-user, installs the CI public key, installs Tailscale and joins the tailnet, installs Python (for
-Ansible). After bootstrap, everything else is CI-driven. Document this clearly — it's the one
-manual step in a rebuild.
+### 5.4 First-boot bootstrap — automate it with Cloud-Init (no manual step)
+
+A brand-new server can't be reached by CI until it has an SSH user + key + Tailscale + Python. On
+**Hetzner Cloud**, do this with zero manual steps by passing a **Cloud-Init `user-data`** script at
+provision time (Hetzner Cloud console/API/Terraform all accept it). The script, run as root on first
+boot, should:
+- create the `ai` user with passwordless sudo + install the CI SSH public key,
+- `apt install` Python 3 (for Ansible),
+- install Tailscale and `tailscale up --authkey <ephemeral tag:ci key> --ssh`.
+
+After first boot the box is reachable by CI and the rest is fully code-driven — **the server is
+code-defined from second zero.** Keep the user-data template in the repo (the Tailscale auth key is a
+secret → injected at provision time from 1Password, never committed).
+
+> Caveat: this is **Hetzner Cloud** `user-data`. Hetzner **dedicated/Robot** servers use `installimage`
+> + a post-install script instead — same idea, different mechanism. Confirm which product this box is.
+> Fallback for any provider: a one-shot `bootstrap.sh` run once from a laptop.
+
+### 5.5 Scheduled drift detection (enforce "the repo is the truth")
+
+Serialization (§6) stops *repo* changes from colliding, but it does **not** stop a rogue session or
+human from SSHing in and hot-fixing the live server out-of-band. Close that gap with a **scheduled**
+GitHub Actions job (e.g. daily 03:00 UTC) that runs `ansible-playbook --check --diff` and **fails +
+alerts if it detects any drift** between the code and the live host. This makes undocumented manual
+changes loud instead of silent.
+- It is **check-only** — it must never apply.
+- Trust it most for the non-disruptive roles; `--check` fidelity is weaker for the risky roles (§4a),
+  so treat their drift signal as "investigate," not "auto-anything."
+- Wire the alert to wherever the owner will actually see it (the same channel as backup alerts).
 
 ---
 
@@ -404,7 +434,8 @@ token/key patterns is empty (§8.4).
 
 **Phase 4 — CI auto-apply enablement (§5).** Until now CI has been **check/PR-diff only**. Only after
 Phases 1–3 gates pass, enable apply-on-merge with the `concurrency` guard. Run the pipeline
-self-test (§8.5). Then fold in the DO droplet (§2.3) as a second inventory group.
+self-test (§8.5). Turn on **scheduled drift detection** (§5.5) and create the **1Password SA-token
+rotation reminder** (§5.2). Then fold in the DO droplet (§2.3) as a second inventory group.
 → **GATE (definition of done):** a trivial PR shows a `--check` diff, merges, applies serially; a
 fresh throwaway box rebuilt entirely from bootstrap + pipeline **diffs clean** against prod (§8.3).
 
@@ -444,8 +475,10 @@ fresh throwaway box rebuilt entirely from bootstrap + pipeline **diffs clean** a
 
 ---
 
-*Written 2026-06-22 by an audit session. **Revised 2026-06-22** after expert review — added the
-phased gates (§9), the role-safety rules for firewall/docker/cloudflared (§4a), the seeded secrets
-inventory (§5.2), and the `cron_glue` ownership decision. If anything here conflicts with what you
+*Written 2026-06-22 by an audit session. **Revised 2026-06-22** after two expert review passes —
+added the phased gates (§9), role-safety rules for firewall/docker/cloudflared (§4a), the seeded
+secrets inventory (§5.2), the `cron_glue` ownership decision, plus the operational hardening from the
+second pass: Cloud-Init bootstrap (§5.4), scheduled drift detection (§5.5), ephemeral Tailscale CI
+auth (§5.1), and 1Password SA-token expiry handling (§5.2). If anything here conflicts with what you
 observe live on the server, trust the live server, update this document, and tell the owner what
 changed.*
