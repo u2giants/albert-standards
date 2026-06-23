@@ -6,6 +6,23 @@ read it first — the rejected options were usually rejected for a real reason.
 
 ---
 
+## 2026-06-22 — Ansible rollout is gated by phases; no auto-apply until proven safe
+
+**Decision:** The host-Ansible build runs in five phases with **hard gates** between them, and CI
+stays **check/PR-diff only** until idempotency is clean *and* the risky roles pass a rebuild-and-diff
+on a throwaway host. Phases: (0) observe & scaffold → (1) non-disruptive roles → (2) risky
+live-service roles (firewall/docker/cloudflared) → (3) secrets migration → (4) CI auto-apply.
+Guardrails baked in: firewall changes keep a **Tailscale out-of-band lifeline** (`100.66.37.58`, by
+IP — MagicDNS is off) + an **auto-revert timer**; the Docker role is **version-pinned and never
+auto-restarts**; `--check` is **not trusted on prod** for the risky roles (prove on scratch first);
+secrets migrate one at a time with per-secret validation + rollback (seeded inventory table in the plan).
+**Why:** Incorporates an expert review of `ansible/ANSIBLE-IMPLEMENTATION-PLAN.md`. The owner can't
+quickly recover from a firewall lockout, a Docker restart that takes down Coolify, or a silently
+broken backup — so on *this* server the extra rigor is worth it. "A plan you haven't proven on a
+throwaway box is a hope."
+**Rejected:** "safest-first, apply each role then move on" with no scratch-host proof and no explicit
+auto-apply gate (the original §9) — too easy to push a lockout/outage straight to prod.
+
 ## 2026-06-22 — Documentation lives in GitHub, not on the server or in AI memory
 
 **Decision:** Cross-cutting infra docs (this file + `HANDOFF.md`) live in `albert-standards`

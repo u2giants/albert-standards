@@ -19,6 +19,9 @@ maintains.
   docker.sock after a host Docker restart) and fixed. `pre-backup.sh` is now resilient/validating/
   loud; a host `systemd` watchdog self-heals it. Reclaimed 35 GB → ~640 MB. Added
   `BACKUP-MANIFEST.md`. (All in `backrest-wiz` → `hetzner-producer/`.)
+- **Ansible plan hardened after expert review** — added phased execution with hard gates (§9),
+  role-safety rules for firewall/docker/cloudflared (§4a), a seeded secrets inventory (§5.2), and
+  the `cron_glue` ownership decision. See `DECISIONS.md`.
 - **Twenty fully removed; Directus deprecated** (→ hosted supabase.com), removed from backups; live
   Directus app left running for the PopPIM migration.
 - **Docs on GitHub:** backup system in `backrest-wiz`; host-Ansible plan in

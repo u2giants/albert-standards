@@ -173,7 +173,7 @@ The authoritative live reference is `/worksp/infra/CLAUDE.md` and `/home/ai/CLAU
 ## 4. Target repository layout (build this under ansible/ in this repo)
 
 ```
-server-infra/
+ansible/                          # this project lives at albert-standards/ansible/ in this repo
 ├── README.md                     # what this is, how to apply, how to add a change (non-engineer level)
 ├── ansible.cfg                   # inventory path, ssh settings, no host key prompt in CI
 ├── inventory/
@@ -183,14 +183,14 @@ server-infra/
 ├── playbooks/
 │   └── site.yml                  # the entrypoint: applies all roles to hetzner
 ├── roles/
-│   ├── base/                     # apt packages, timezone, unattended-upgrades, journald limits
-│   ├── users/                    # the `ai` user, sudo, authorized_keys (public keys only)
-│   ├── firewall/                 # iptables rules.v4/v6 + netfilter-persistent + fail2ban
-│   ├── docker/                   # engine + compose plugin + daemon.json (live-restore) ONLY
-│   ├── dns_hardening/            # resolved.conf.d/fallback-dns.conf  (see §3.3)
-│   ├── cloudflared_coolify/      # Tunnel 1 systemd unit + env file (token from 1Password)
-│   ├── cron_glue/               # /worksp/hiclaw keepers, sync-infra-docs (managed copies)
-│   └── backrest_watchdog/        # the backup self-heal timer (already authored in backrest-hetzner)
+│   ├── base/                     # apt packages, timezone, unattended-upgrades, journald limits   [non-disruptive]
+│   ├── users/                    # the `ai` user, sudo, authorized_keys (public keys only)        [non-disruptive]
+│   ├── dns_hardening/            # resolved.conf.d/fallback-dns.conf  (see §3.3)                   [non-disruptive]
+│   ├── firewall/                 # iptables rules.v4/v6 + netfilter-persistent + fail2ban    ⚠️ RISKY — see §4a
+│   ├── docker/                   # daemon.json ONLY; pinned version, NEVER auto-restart      ⚠️ RISKY — see §4a
+│   ├── cron_glue/                # cron ENTRIES only; keeper SCRIPTS stay in the HiClaw repo  (see §4a)
+│   ├── backrest_watchdog/        # the backup self-heal timer (already authored, in backrest-wiz/hetzner-producer)
+│   └── cloudflared_coolify/      # Tunnel 1 systemd unit + env file (token from 1Password)   ⚠️ RISKY — see §4a
 ├── files/ , templates/           # static files + jinja templates referenced by roles
 └── .github/workflows/
     └── apply.yml                 # the serialized apply pipeline (see §5)
@@ -201,6 +201,42 @@ Notes:
 - Use `ansible.builtin` modules only where possible (no exotic collection dependencies) so any AI
   session can run it with a stock Ansible install.
 - Make **every task idempotent** and safe to re-run. Use `--check` (dry-run) in CI on PRs.
+
+### 4a. Safety rules for the risky roles (read before writing `firewall`, `docker`, `cloudflared_coolify`)
+
+These three roles can take the box down. They are **gated to Phase 2** (see §9) and must be proven
+on a throwaway host before they ever touch prod.
+
+- **`firewall` — can lock you out of SSH. Highest practical risk.**
+  - Your out-of-band lifeline is **Tailscale** (`100.66.37.58`). Every templated ruleset MUST keep
+    the `tailscale0` interface and SSH open. Assert this in the role before applying.
+  - Staged flow: capture current rules → template them → `--check`/`--diff` → **verify Tailscale +
+    SSH reachability** → only then apply.
+  - Apply with an **auto-revert timer** (an `at`/systemd one-shot that reloads the last-known-good
+    rules in 60s unless you confirm). A wrong rule then un-does itself instead of stranding you.
+  - Never apply firewall changes blind from CI before the auto-revert + reachability checks exist.
+
+- **`docker` — a daemon restart hits Coolify + ~20 containers, and restarts cause docker.sock
+    staleness (the June 2026 outage).**
+  - Manage **`daemon.json` only** (keep `live-restore: true`, no `dns` key). **Pin the `docker-ce`
+    package version** — do NOT let the role upgrade Docker.
+  - **Ansible must NEVER auto-restart Docker.** A `daemon.json` change should `notify` a handler that
+    is **manual-gated** (prints "Docker restart required — do it in a maintenance window"), not one
+    that restarts automatically.
+  - Any deliberate Docker restart must be followed by bouncing the `backrest` container (docker.sock
+    staleness — now also covered by `backrest-dump-watchdog`).
+
+- **`cloudflared_coolify` — touches a live tunnel.** Manage only Tunnel 1's systemd unit + env file.
+  Never touch the Coolify-owned Tunnels 2/3 (§3.1). Validate the tunnel reconnects after any change.
+
+- **`cron_glue` — ownership decided:** Ansible owns the **cron entry** (that it exists, on what
+  schedule); the **keeper scripts** in `/worksp/hiclaw/*.sh` belong to the HiClaw repo, NOT host
+  Ansible. (Those minute-by-minute reconciliation loops are an app-layer smell; don't adopt them.)
+
+- **`--check` mode is not reliably read-only.** `command`/`shell` tasks either skip or actually run
+  in check mode, so a PR diff can lie. Therefore: minimize `command`/`shell`; mark genuine reads
+  `check_mode: false` deliberately; and **do not trust prod `--check` for the risky roles** — prove
+  them on the throwaway host (§8.3) first. Validate check-mode behavior role-by-role.
 
 ---
 
@@ -229,11 +265,26 @@ This is the heart of the "7 AI sessions can't collide" guarantee. Design:
   stored directly in GitHub). All other secrets (SSH key, tunnel tokens, CF API token, restic/S3
   creds) are referenced as `op://vibe_coding/<item>/<field>` and injected as env vars at apply time,
   then passed to Ansible via `--extra-vars` or `lookup('env', ...)`.
-- **Prerequisite task:** the secrets must first be *put into* 1Password. Today they are NOT — they
-  live in plaintext `.env` files on the server (e.g. `restore-wizard/.env` has 25 plaintext values)
-  and one was even embedded in a git remote. Part of this project is migrating them into the
-  `vibe_coding` vault. Do this carefully, one secret at a time, verifying the app still works; this
-  is the riskiest part and should be its own reviewed phase.
+- **This is its own gated phase (Phase 3, §9), not a side task.** Secrets are NOT yet in 1Password —
+  they live in plaintext `.env` files and configs, and one was even embedded in a git remote. Migrate
+  them **one at a time**, each with a validation and a rollback, working down the inventory below.
+  Never delete the plaintext source until the `op`-sourced value is validated working.
+
+#### Secrets inventory (seed — verify and extend on the box; record values ONLY in 1Password)
+
+| Secret | Current location(s) | Target `op` item | Consuming service | Validate | Rollback |
+|---|---|---|---|---|---|
+| GitHub PAT | `~/.netrc`, `~/.claude.json` (`GITHUB_TOKEN`) | `vibe_coding/github-pat` ✅ *done* | git, curl, GitHub MCP | `curl -H "Authorization: token $T" https://api.github.com/user` → 200 | `.bak-*` files / re-mint |
+| Restic repo password | `/opt/backrest/config/config.json` (`repos[0].password`) | `vibe_coding/restic-hetzner` | backrest / restic | `restic snapshots` succeeds | restore `config.json` backup |
+| DO Spaces access+secret keys | `config.json` env (`AWS_*`); `restore-wizard/.env` (`DO_SPACES_*`) | `vibe_coding/do-spaces` | backrest→S3, restore-wizard | `restic snapshots` / S3 list | restore config/.env backup |
+| Cloudflare DNS API token | `coolify-proxy` env + `/data/coolify/proxy/docker-compose.yml` (`CF_DNS_API_TOKEN`) | `vibe_coding/cf-dns-token` | Traefik DNS-01 certs | cert renew / CF API test | restore compose backup |
+| CF Tunnel 1 token | `/etc/cloudflared/coolify-tunnel.env` | `vibe_coding/cf-tunnel-coolify` | `cloudflared-coolify.service` | tunnel reconnects | restore env backup |
+| GHCR PAT | GitHub Actions secret + `/root/.docker/config.json` | `vibe_coding/ghcr-pat` | image pulls / deploy | `docker pull` a private image | `docker login` again |
+| restore-wizard app secrets (~25: OpenRouter, Google OAuth id/secret, `SESSION_SECRET`, …) | `restore-wizard/.env` (DO droplet) | one `op` item per secret | restore-wizard app | app boots + Google login works | restore `.env` backup |
+| oauth2-proxy secrets | `/worksp/hiclaw/oauth2-proxy/.env` | `vibe_coding/oauth2-proxy` | `oauth2-proxy` | OIDC discovery succeeds at startup | restore `.env` backup |
+
+> Out of scope here: **Tunnels 2/3 tokens** (`TUNNEL_TOKEN`, `CF_GW_TUNNEL_TOKEN`) are Coolify-managed
+> — leave them with Coolify, don't migrate via host Ansible.
 
 ### 5.3 Why CI and not on-box Ansible
 The owner explicitly chose a CI runner over installing Ansible on the server because: the control
@@ -320,52 +371,81 @@ A backup/rebuild plan you have never tested is a hope, not a plan. Prove it:
 
 ---
 
-## 9. Sequencing (suggested order of work)
+## 9. Phased execution with hard gates (do them in order; do NOT skip a gate)
 
-1. **Scaffold** the repo (§4), `ansible.cfg`, inventory with the one host, an empty `site.yml`.
-2. **Inventory the box** (§7); write the README scope/rules.
-3. **Roles, safest first:** `base` → `users` → `dns_hardening` → `firewall` → `docker` (install +
-   daemon.json only) → `cron_glue` → `backrest_watchdog` → `cloudflared_coolify` (last; touches a
-   live tunnel). Apply each with `--check` first, then for real, verifying nothing breaks.
-4. **Secrets → 1Password** (§5.2): migrate one secret at a time; verify each app still works.
-5. **CI pipeline** (§5): start with `--check` on PRs only (no auto-apply) until you trust it, then
-   enable apply-on-merge with the concurrency guard.
-6. **Fold in the DO droplet** (§2.3) as a second inventory group using the existing `restore-wizard`
-   Ansible.
-7. **Rebuild-and-diff test** (§8.3). Only after this passes is the project "done."
+Each phase ends with a **GATE** that must pass before the next begins. The golden rule:
+**no CI auto-apply until idempotency is clean AND the risky roles are proven on a throwaway host.**
+Until then, CI is **check/PR-diff only**.
+
+**Phase 0 — Observe & scaffold (zero changes to the host).**
+Inventory the box (§7). Scaffold the repo (§4): `ansible.cfg`, inventory with the one host, empty
+`site.yml`, README with the scope/rules (§6). Stand up a **throwaway scratch host** (a cheap
+Hetzner/DO box) you'll use to prove roles before prod.
+→ **GATE:** repo runs `ansible-playbook --list-tasks` cleanly; scratch host reachable.
+
+**Phase 1 — Non-disruptive roles.** `base` → `users` → `dns_hardening` → `backrest_watchdog`.
+These are additive/low-risk. Apply `--check` then for real, on scratch first, then prod.
+→ **GATE:** each role is **idempotent** (second run = 0 changes) on both scratch and prod.
+
+**Phase 2 — Risky live-service roles (the ones that can take the box down).**
+`firewall` → `docker` → `cloudflared_coolify`, following the §4a safety rules (Tailscale lifeline +
+auto-revert for firewall; pinned + never-auto-restart for docker; live-tunnel care for cloudflared).
+**Prove every one on the scratch host with a full rebuild-and-diff (§8.3) BEFORE it touches prod.**
+Do not trust prod `--check` for these (§4a). Apply to prod only in a maintenance window, one role at
+a time, watching for breakage.
+→ **GATE:** scratch-host rebuild-and-diff is clean; prod apply caused no Coolify/DNS/tunnel/SSH
+disruption; all roles idempotent.
+
+**Phase 3 — Secrets migration (§5.2).** Work down the inventory table **one secret at a time**:
+put it in 1Password → switch the consumer to the `op` reference → run its validation → only then
+delete the plaintext source. Roll back on any failure.
+→ **GATE:** every secret validated from `op`; no plaintext secret remains; `git log -p | grep` for
+token/key patterns is empty (§8.4).
+
+**Phase 4 — CI auto-apply enablement (§5).** Until now CI has been **check/PR-diff only**. Only after
+Phases 1–3 gates pass, enable apply-on-merge with the `concurrency` guard. Run the pipeline
+self-test (§8.5). Then fold in the DO droplet (§2.3) as a second inventory group.
+→ **GATE (definition of done):** a trivial PR shows a `--check` diff, merges, applies serially; a
+fresh throwaway box rebuilt entirely from bootstrap + pipeline **diffs clean** against prod (§8.3).
 
 ---
 
 ## 10. Things to confirm with the owner before/while building (open questions)
 
-- **Secrets migration scope & timing** — moving ~25+ plaintext secrets into 1Password is risky;
-  confirm the owner wants this now and do it in a reviewed, app-by-app way.
 - **CI runner network path** — Tailscale (recommended) vs public-IP SSH. Needs a CI key/auth method
-  the owner provisions.
-- **Repo creation/push approval** — creating `server-infra` content and pushing requires the owner's
-  explicit OK (classifier blocks agent-initiated repo creation/bulk push). This repo already exists
-  (`u2giants/albert-standards (this repo, ansible/ folder)`) so prefer committing here over creating anything new.
-- **How aggressive to be with `cron_glue`** — the `/worksp/hiclaw/*` keepers are app-adjacent;
-  confirm whether they belong in host Ansible or should stay with HiClaw.
-- **Directus teardown** — Directus is being deprecated (PopPIM migrating to hosted supabase.com).
-  If/when the `directus-app`/`directus-db` containers are fully retired, remove them via Coolify
-  (not Ansible) and update docs.
+  the owner provisions. (Tailscale is also the firewall out-of-band lifeline — §4a.)
+- **Repo push approval** — pushing here requires the owner's explicit OK (the classifier blocks
+  agent-initiated repo creation/bulk push). This repo (`u2giants/albert-standards`, `ansible/` folder)
+  already exists — commit here, don't create new repos.
+- **Directus teardown** — deprecated (PopPIM migrating to hosted supabase.com); a scheduled reminder
+  (2026-07-22) handles decommission via Coolify (not Ansible). Don't add a Directus role.
+
+**Resolved (kept here for the record):**
+- ~~`cron_glue` ownership~~ → **decided** (§4a): Ansible owns the cron *entry*; the keeper *scripts*
+  stay in the HiClaw repo.
+- ~~Secrets migration scope~~ → **defined** as gated Phase 3 with the inventory table (§5.2, §9).
 
 ---
 
 ## 11. Reference material already on the box (read these)
 
-- `/worksp/infra/CLAUDE.md` and `/home/ai/CLAUDE.md` — the authoritative live server reference
-  (traffic routing, tunnels, DNS, ports, Cloudflare IDs, "things you must not do"). **Read fully.**
-- `/home/ai/backrest-hetzner/` — the backup system: `README.md` (incident record + how it works),
-  `BACKUP-MANIFEST.md` (what's backed up), `HANDOFF.md` (3-2-1 + restore-test gaps),
-  `bin/` + `systemd/` (the watchdog you'll wrap in a role).
-- `/home/ai/restore-wizard/ansible/` — the existing droplet playbook to model the DO host on and
-  eventually fold into this inventory.
-- `/worksp/albert-standards/infrastructure/` — prior incident post-mortems and runbooks (DNS
-  cascade, cloudflared/oauth2 recovery) — good context, but it is **docs only, not runnable IaC**.
+- `infrastructure/CLAUDE.md` (this repo) — the authoritative live server reference (traffic routing,
+  tunnels, DNS, ports, Cloudflare IDs, "things you must not do"). **Read fully.** (A copy is also
+  auto-loaded on the box at `/home/ai/CLAUDE.md`.)
+- `infrastructure/DECISIONS.md` + `infrastructure/HANDOFF.md` (this repo) — the *why* and the living
+  status of this initiative.
+- **`backrest-wiz` repo → `hetzner-producer/`** — the backup system: `README.md` (incident record),
+  `BACKUP-MANIFEST.md`, `HANDOFF.md` (3-2-1 + restore-test gaps), `bin/` + `systemd/` (the watchdog
+  you'll wrap in the `backrest_watchdog` role).
+- **`backrest-wiz` repo → `ansible/`** — the existing DO-droplet playbook to model the `do_backup_wiz`
+  host on and fold into this inventory.
+- `infrastructure/post-mortems/` + `runbooks/` (this repo) — prior incidents (DNS cascade,
+  cloudflared/oauth2 recovery) — good context, docs only.
 
 ---
 
-*Written 2026-06-22 by an audit session. If anything here conflicts with what you observe live on
-the server, trust the live server, update this document, and tell the owner what changed.*
+*Written 2026-06-22 by an audit session. **Revised 2026-06-22** after expert review — added the
+phased gates (§9), the role-safety rules for firewall/docker/cloudflared (§4a), the seeded secrets
+inventory (§5.2), and the `cron_glue` ownership decision. If anything here conflicts with what you
+observe live on the server, trust the live server, update this document, and tell the owner what
+changed.*
