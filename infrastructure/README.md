@@ -7,8 +7,12 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | Path | Purpose |
 |------|---------|
 | [`CLAUDE.md`](CLAUDE.md) | **Full server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
+| [`HANDOFF.md`](HANDOFF.md) | **Start here for the IaC/backup initiative** — current status, what's done, what's left for next time. Rewritten each session. |
+| [`DECISIONS.md`](DECISIONS.md) | **The *why* log** — every architecture decision, when, and what was rejected. Append-only. |
 | [`runbooks/`](runbooks/) | Step-by-step diagnosis and fix guides for known failure modes |
 | [`post-mortems/`](post-mortems/) | Incident records: what happened, root cause, what was fixed |
+
+> The full host-Ansible + CI build plan lives in [`../ansible/ANSIBLE-IMPLEMENTATION-PLAN.md`](../ansible/ANSIBLE-IMPLEMENTATION-PLAN.md). Backup-system docs live in the `backrest-wiz` repo.
 
 ## Runbooks
 
