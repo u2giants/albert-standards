@@ -36,7 +36,7 @@ maintains.
 
 **Security / token (finish before revoking the old PAT):**
 - Update the old token in the `/worksp/designflow-*` repos (couldn't reach them as user `ai`).
-- Sweep each environment: `grep -rl 'ghp_nUaYU…' ~ /worksp` until empty, then **revoke** the old
+- Sweep each environment: `grep -rl '<the-old-token-you-are-revoking>' ~ /worksp` until empty, then **revoke** the old
   token on GitHub. Delete `~/.netrc.bak-20260622` + `~/.claude.json.bak-20260622` (hold the old token).
 - **Rotate the DO Spaces key pair** — the access key *id* was briefly in `backrest-wiz` history.
 
