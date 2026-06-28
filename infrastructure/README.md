@@ -6,9 +6,10 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 
 | Path | Purpose |
 |------|---------|
-| [`CLAUDE.md`](CLAUDE.md) | **Full server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
+| [`CLAUDE.md`](CLAUDE.md) | **Full Hetzner/Coolify server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
 | [`HANDOFF.md`](HANDOFF.md) | **Start here for the IaC/backup initiative** — current status, what's done, what's left for next time. Rewritten each session. |
 | [`DECISIONS.md`](DECISIONS.md) | **The *why* log** — every architecture decision, when, and what was rejected. Append-only. |
+| [`designflow-cloud-run.md`](designflow-cloud-run.md) | **Designflow application environment** — Google Cloud Run topology, Cloud Build deployment, BFF/private-service routing, secrets, and operating rules. |
 | [`runbooks/`](runbooks/) | Step-by-step diagnosis and fix guides for known failure modes |
 | [`post-mortems/`](post-mortems/) | Incident records: what happened, root cause, what was fixed |
 
@@ -39,7 +40,7 @@ knowledgebase and the PopDAM repo docs together.
 | [2026-05-20](post-mortems/2026-05-20-hetzner-crash.md) | Hetzner VPS unclean reboot; HiClaw recursive MinIO mirror (primary) + Twenty email rerouter query storm (contributing) |
 | [2026-05-20](post-mortems/2026-05-20-dns-cascade.md) | hiclaw→Twenty cascade caused DNS failure; Hetzner DNS servers unreachable |
 
-## Server
+## Infrastructure surfaces
 
 Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Docker (all apps containerized)
@@ -48,3 +49,8 @@ Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Cloudflare Tunnels (3 active: `coolify`, `mcp`, `mcpgw` subdomains)
 - Authentik (`auth.designflow.app`, identity provider)
 - `systemd-resolved` with Cloudflare/Google/Quad9 DNS + fallback
+
+Designflow PLM is separate from that VPS application stack. It runs on Google
+Cloud Run via Cloud Build and Artifact Registry. Use
+[`designflow-cloud-run.md`](designflow-cloud-run.md) for Designflow app runtime,
+deployment, auth, secrets, and environment decisions.

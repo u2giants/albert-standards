@@ -1,13 +1,19 @@
 # Runbook: Container Resource Limits
 
 **Last updated:** 2026-05-21
-**Applies to:** All Docker-based services on the production Hetzner VPS
+**Applies to:** Docker-based services on the production Hetzner VPS. For
+Designflow PLM Cloud Run services, use Cloud Run CPU/memory/concurrency/max
+instance settings from each repo's `cloudbuild.yaml` and trigger substitutions;
+see [`../designflow-cloud-run.md`](../designflow-cloud-run.md).
 
 ---
 
 ## Policy
 
 Every containerized service on this server **must** have explicit memory and CPU limits. No service should run uncapped.
+
+Designflow Cloud Run services follow the same capacity-control principle, but
+the controls are Cloud Run service settings rather than Docker/Coolify limits.
 
 ---
 

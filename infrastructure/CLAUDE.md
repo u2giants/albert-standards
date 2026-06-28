@@ -1,5 +1,13 @@
 # Server Infrastructure — designflow.app VPS
 
+Designflow PLM itself is not hosted by this VPS/Coolify stack. The Designflow
+application runtime is Google Cloud Run with Cloud Build/Artifact Registry and a
+public BFF in front of private services. For Designflow app infrastructure,
+deployment, auth, and secrets rules, read
+[`designflow-cloud-run.md`](designflow-cloud-run.md). This file remains the
+reference for the Hetzner VPS, Coolify, Traefik, Cloudflare tunnels, and related
+server runbooks.
+
 ## Overview
 
 This VPS (178.156.180.212) runs Coolify, which manages all deployed applications.
