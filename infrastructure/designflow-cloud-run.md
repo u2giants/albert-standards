@@ -1,6 +1,6 @@
 # Designflow Cloud Run Environment
 
-**Last updated:** 2026-06-22
+**Last updated:** 2026-07-09
 
 This page records the non-code infrastructure, server, and operating-environment
 standard for the Designflow PLM application. It is the exception to the default
@@ -14,11 +14,11 @@ Designflow runs in Google Cloud, not on the Hetzner/Coolify application host.
 | Item | Current standard |
 |---|---|
 | GCP project | `lithe-breaker-323913` |
-| Region | `us-central1` |
+| Region | `us-east4` for current Albert sandbox Cloud Run services; older docs/legacy services may still mention `us-central1` |
 | Runtime | Google Cloud Run, managed/serverless/stateless |
 | Build/deploy | Google Cloud Build triggers on git push |
 | Image registry | Google Artifact Registry |
-| Database | PostgreSQL reachable by Cloud Run through configured networking/VPC connector |
+| Database | Shared Supabase Postgres reached by Cloud Run through configured networking/VPC connector and the Supabase pooler |
 | Secrets | Google Secret Manager, injected with Cloud Run `--set-secrets` |
 | Plain config | Cloud Run `--set-env-vars`; every value that must survive a deploy must be listed |
 | File/media storage | DigitalOcean Spaces, with service-specific `DO_*` env/secrets |
@@ -90,8 +90,18 @@ in deployed environments.
   Artifact Registry image tag.
 - Do not hot-edit running containers or server files. Change the repo or Cloud
   Run/Cloud Build configuration, then redeploy.
-- Tests are part of service startup/build in several repos. Do not bypass test
-  gates to push a deploy.
+- Tests must run in Cloud Build, not inside Cloud Run startup. Cloud Run
+  containers should start the actual Node process directly (`node index.js` or
+  `node src/server.js`) rather than running `npm test`, `yarn start:$NODE_ENV`,
+  or `nodemon` in deployed revisions.
+- The active Albert sandbox services used for interactive testing should keep
+  one warm instance where first-load reliability matters. As of 2026-07-09:
+  `popcre-albert-bff-sandbox`, `popcre-albert-core-sandbox`, and
+  `popcre-albert-item-sandbox` use `autoscaling.knative.dev/minScale=1`.
+- Shared Supabase pooler session limits are part of app runtime design. Services
+  using Sequelize/`pg` against the pooler should keep conservative pool defaults
+  (`DB_POOL_MAX=5`, `pool.min=0`, short idle/evict, TCP keep-alive) unless the
+  shared connection budget is deliberately recalculated.
 
 ## Secrets And Config Rules
 
@@ -122,6 +132,9 @@ require coordinated updates across services.
 
 - Additive schema changes use idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
   blocks in service startup migrations.
+- Runtime pool/concurrency changes are not schema changes, but they still affect
+  the shared database. Document confirmed pooler behavior in `u2giants/shared-db`
+  and keep app repo Cloud Build env defaults in sync.
 - Quote mixed-case identifiers in raw Postgres DDL.
 - Keep `client_encoding` UTF-8; never load production or sandbox data through a
   Windows CP437 console. Use UTF-8-safe `pg_dump`/`pg_restore` or `psql` paths.
