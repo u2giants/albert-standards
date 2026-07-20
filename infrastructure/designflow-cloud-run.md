@@ -1,6 +1,6 @@
 # Designflow Cloud Run Environment
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-20
 
 This page records the non-code infrastructure, server, and operating-environment
 standard for the Designflow PLM application. It is the exception to the default
@@ -18,16 +18,17 @@ Designflow runs in Google Cloud, not on the Hetzner/Coolify application host.
 | Runtime | Google Cloud Run, managed/serverless/stateless |
 | Build/deploy | Google Cloud Build triggers on git push |
 | Image registry | Google Artifact Registry |
-| Database | Shared Supabase Postgres reached by Cloud Run through configured networking/VPC connector and the Supabase pooler |
+| Database | Managed non-production: shared Supabase pooler; production: private-VPC Cloud SQL |
 | Secrets | Google Secret Manager, injected with Cloud Run `--set-secrets` |
 | Plain config | Cloud Run `--set-env-vars`; every value that must survive a deploy must be listed |
 | File/media storage | DigitalOcean Spaces, with service-specific `DO_*` env/secrets |
 | SSH/server editing | Not used for app deploys; deploy by image/revision only |
 
-Cloud Build trigger substitutions live in GCP, not in the repositories. Treat the
-trigger settings as part of production configuration. If a repo-level
-`cloudbuild.yaml` adds or renames a substitution, update the relevant trigger and
-the service docs together.
+Cloud Build trigger substitutions are managed as Terraform in
+`popcre/infrastructure`; GCP is the applied runtime copy. Every database deploy
+must carry provider, expected port, network path, SSL mode, all five secret IDs,
+and all five secret versions. If a repo-level `cloudbuild.yaml` adds or renames a
+substitution, change the infrastructure contract and service docs together.
 
 ## Service Topology
 
@@ -75,6 +76,18 @@ The current branch/environment pattern is:
 | Shared sandbox/develop | `develop` | `sandbox.designflow.app`, `api.sandbox.designflow.app` | Shared staging/integration |
 | Production | `main`/production trigger | `designflow.app`, `www.designflow.app`, `app.designflow.app`, `api.designflow.app` | Live production |
 
+Database targets are intentionally different by environment:
+
+| Environment | Provider / port | Secret set | Network / SSL |
+|---|---|---|---|
+| `develop` | Supabase pooler / `6543` | `DB_*_DEV` | public pooler / SSL on |
+| `staging` | Supabase pooler / `6543` | `DB_*_STAGING` | public pooler / SSL on |
+| `sandbox-albert`, `albert-2sandbox` | Supabase pooler / `6543` | `DB_*_SANDBOX` | public pooler / SSL on |
+| `production` | Cloud SQL / `5432` | unsuffixed `DB_*` | private VPC / SSL off |
+
+The host, port, user, password, and database name are one indivisible tuple.
+Never copy or update only one member across environments.
+
 Frontend configuration is compiled into the Angular bundle from
 `src/environments/*`; the frontend container has no runtime `.env` injection.
 Backend services load `.env.<NODE_ENV>` locally and receive Cloud Run env/secrets
@@ -98,15 +111,25 @@ in deployed environments.
   one warm instance where first-load reliability matters. As of 2026-07-09:
   `popcre-albert-bff-sandbox`, `popcre-albert-core-sandbox`, and
   `popcre-albert-item-sandbox` use `autoscaling.knative.dev/minScale=1`.
-- Shared Supabase pooler session limits are part of app runtime design. Services
-  using Sequelize/`pg` against the pooler should keep conservative pool defaults
+- Shared Supabase pooler session limits are part of non-production app runtime
+  design. Services using Sequelize/`pg` against the pooler should keep conservative pool defaults
   (`DB_POOL_MAX=5`, `pool.min=0`, short idle/evict, TCP keep-alive) unless the
   shared connection budget is deliberately recalculated.
 
 ## Secrets And Config Rules
 
 - Secrets belong in Secret Manager and must be wired with `--set-secrets`.
+- Secret values and recovery notes belong in the 1Password `vibe_coding` vault;
+  secret values never belong in repositories, plans, logs, or command history.
 - Never put credentials in `--set-env-vars`.
+- Non-production may follow `latest` within its matching suffixed secret set.
+  Production database secret references must use numeric versions; `latest` is
+  forbidden so a new secret version cannot silently retarget a deployment.
+- Production automatic build triggers stay disabled until the four guarded
+  backend changes have passed sandbox review and Uma approves promotion.
+- Any production DB secret mutation is a break-glass operation requiring explicit
+  owner approval. The project alert `CRITICAL: production DB secret version changed`
+  reports additions, enable/disable actions, and destruction of unsuffixed DB secrets.
 - `--set-env-vars` is a full replacement on deploy. Any plain env var not listed
   can be deleted by the next deploy.
 - For DigitalOcean Spaces, keys go through Secret Manager; endpoint/bucket/public
@@ -127,14 +150,20 @@ The frontend is an nginx-served SPA on Cloud Run.
 ## Shared Database And Encoding Rules
 
 The Node backend services use Sequelize models over a shared PostgreSQL schema.
-Several repos physically duplicate model definitions, so schema changes often
-require coordinated updates across services.
+Several repos physically duplicate model definitions, so app model/query changes
+often require coordinated updates across services.
 
-- Additive schema changes use idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
-  blocks in service startup migrations.
+- `u2giants/shared-db` is the only schema authority. Every table, column, view,
+  RPC, trigger, RLS, seed, backfill, or cross-app data-contract change starts as
+  a new timestamped migration there, preview first. Never add app startup DDL,
+  app-local migrations, dashboard edits, or direct production SQL.
 - Runtime pool/concurrency changes are not schema changes, but they still affect
   the shared database. Document confirmed pooler behavior in `u2giants/shared-db`
-  and keep app repo Cloud Build env defaults in sync.
+  and keep the `popcre/infrastructure` connection contract and app deploy guards
+  in sync.
+- Each private Node service validates the environment/provider/port/host/user/SSL
+  relationship before its first connection. Its Cloud Build preflight validates
+  the secret IDs and versions before image build. Invalid combinations fail closed.
 - Quote mixed-case identifiers in raw Postgres DDL.
 - Keep `client_encoding` UTF-8; never load production or sandbox data through a
   Windows CP437 console. Use UTF-8-safe `pg_dump`/`pg_restore` or `psql` paths.
