@@ -22,14 +22,14 @@ maintains.
 - **Ansible plan hardened after expert review** — added phased execution with hard gates (§9),
   role-safety rules for firewall/docker/cloudflared (§4a), a seeded secrets inventory (§5.2), and
   the `cron_glue` ownership decision. See `DECISIONS.md`.
-- **Twenty fully removed; Directus deprecated** (→ hosted supabase.com), removed from backups; live
-  Directus app left running for the PopPIM migration.
+- **Legacy backends retired** in favor of hosted supabase.com and removed from routine backups; one
+  retired app was temporarily left running for the PopPIM migration.
 - **Docs on GitHub:** backup system in `backrest-wiz`; host-Ansible plan in
   `albert-standards/ansible/ANSIBLE-IMPLEMENTATION-PLAN.md`; this file + `DECISIONS.md` here.
 - **Leaked GitHub token contained.** Removed from 4 git remotes (now use the `gh` credential
   helper); new PAT stored in 1Password (`vibe_coding/github-pat`) and swapped into `~/.netrc` and
   `~/.claude.json`.
-- **Directus decommission reminder** scheduled (cloud routine `trig_01Crwkmo2gGLhTNqnNbNu4Qu`,
+- **Legacy-backend decommission reminder** scheduled (cloud routine `trig_01Crwkmo2gGLhTNqnNbNu4Qu`,
   fires 2026-07-22 — verifies the Supabase migration first).
 
 ## ⏭️ What's left (next time)
@@ -43,7 +43,7 @@ maintains.
 **Backups (see the backup `HANDOFF.md` in `backrest-wiz`):**
 - Add a **second, independent backup destination** (not yet 3-2-1; only DO Spaces today).
 - **Rehearse a restore** — no backup has ever been test-restored.
-- Restic history purge: Twenty can be purged as a monitored job anytime; Directus purge rides the
+- Restic history purge: retired-system history can be purged as a monitored job on its retention schedule.
   2026-07-22 decommission reminder.
 
 **The main build (the big one):**

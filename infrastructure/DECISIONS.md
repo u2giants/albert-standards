@@ -83,13 +83,13 @@ is not a backup that works." See the backup README incident record in `backrest-
 **Rejected:** The original fail-silent script; relying on the in-container docker.sock without a
 host-side safety net.
 
-## 2026-06-22 — Twenty retired; Directus deprecated (→ hosted Supabase)
+## 2026-06-22 — legacy application backends retired
 
-**Decision:** Twenty CRM fully removed. Directus deprecated in favor of hosted supabase.com; removed
+**Decision:** The earlier CRM was fully removed. The later legacy CMS was deprecated in favor of hosted supabase.com; removed
 from backups, app left running ~1 month for the PopPIM migration (scheduled decommission reminder
 for 2026-07-22).
 **Why:** Apps no longer in use shouldn't consume backup space or clutter configs; but a live app
-mid-migration shouldn't be torn down (PopPIM still read through Directus).
+mid-migration should not be torn down until all PopPIM reads are migrated.
 
 ## 2026-06-22 — The model: "pets → cattle" via Infrastructure as Code
 
