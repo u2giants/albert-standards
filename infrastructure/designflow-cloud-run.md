@@ -66,6 +66,32 @@ must be the backend service `.run.app` URLs, never custom `api.*.designflow.app`
 domains. Custom domains route HTTP correctly but do not work as Cloud Run OIDC
 audiences and have caused repeated Microsoft SSO/login outages.
 
+### Background jobs: Cloud Tasks push (HTS classification)
+
+Long AI work does not run after a response or on in-process timers (Cloud Run
+CPU is request-based). It runs inside a Cloud Tasks HTTP push request to the
+existing private backend. No always-on CPU and no worker service.
+
+- Queue (sandbox, created 2026-09-15, owner-approved):
+  `projects/lithe-breaker-323913/locations/us-east4/queues/hts-classification-jobs-albert-sandbox`;
+  `maxConcurrentDispatches` 6 (= global running cap), `maxAttempts` 5, `minBackoff` 10s.
+- Target: `POST <popcre-albert-core-sandbox .run.app URL>/internal/hts-jobs/:jobId/run`
+  (fallback Cloud Scheduler drain: `/internal/hts-jobs/drain`). Not under `/api`,
+  never proxied or exposed by the BFF.
+- Auth: task carries a Google OIDC token for
+  `deployer@lithe-breaker-323913.iam.gserviceaccount.com`, audience = the backend
+  `.run.app` URL (never a custom domain). The route verifies issuer, audience and SA email
+  itself; there is no `X-User-Authorization` user JWT on these calls.
+- IAM: `deployer@` (backend runtime SA and push SA) holds `roles/cloudtasks.enqueuer`,
+  `roles/run.invoker` and `roles/iam.serviceAccountUser` project-wide. No other grants.
+- Timeout rule (tested in the backend): provider turn timeout < job lease <
+  task `dispatchDeadline` (180s) <= Cloud Run request timeout (300s; do not lower below 180s).
+- Delivery is at-least-once: the DB claim/lease row is the idempotency gate.
+- Backend env: `HTS_JOBS_TASKS_QUEUE`, `HTS_JOBS_TASKS_LOCATION`, `HTS_JOBS_RUN_URL`,
+  `HTS_JOBS_PUSH_SA_EMAIL`, `HTS_JOBS_DISPATCH_DEADLINE_S`.
+- Plan: `popcre/designflow-frontend` `plan_hts-background-classification.md` (sandbox-albert).
+- Creating queues or changing their IAM for other environments needs Albert's named approval.
+
 ## Environments
 
 The current branch/environment pattern is:
