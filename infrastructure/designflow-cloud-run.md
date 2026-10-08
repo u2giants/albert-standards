@@ -15,7 +15,7 @@ Designflow runs in Google Cloud, not on the Hetzner/Coolify application host.
 |---|---|
 | GCP project | `lithe-breaker-323913` |
 | Region | `us-east4` for current Albert sandbox Cloud Run services; older docs/legacy services may still mention `us-central1` |
-| Runtime | Google Cloud Run, managed/serverless/stateless |
+| Runtime | Google Cloud Run, managed/serverless/stateless; request-based CPU is the default, while idle background processing requires instance-based CPU allocation ([Cloud Run billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings)) |
 | Build/deploy | Google Cloud Build triggers on git push |
 | Image registry | Google Artifact Registry |
 | Database | Managed non-production: shared Supabase pooler; production: private-VPC Cloud SQL |
@@ -66,11 +66,12 @@ must be the backend service `.run.app` URLs, never custom `api.*.designflow.app`
 domains. Custom domains route HTTP correctly but do not work as Cloud Run OIDC
 audiences and have caused repeated Microsoft SSO/login outages.
 
-### Background jobs: Cloud Tasks push (HTS classification)
+### Operative background jobs: Cloud Tasks push (HTS classification)
 
-Long AI work does not run after a response or on in-process timers (Cloud Run
-CPU is request-based). It runs inside a Cloud Tasks HTTP push request to the
-existing private backend. No always-on CPU and no worker service.
+Operative HTS classification work does not continue after its request or run on
+an in-process timer. Each job runs inside a Cloud Tasks HTTP push request to the
+existing private backend, using request-based CPU. This path does not require
+always-allocated CPU or a worker service.
 
 - Queue (sandbox, created 2026-09-15, owner-approved):
   `projects/lithe-breaker-323913/locations/us-east4/queues/hts-classification-jobs-albert-sandbox`;
@@ -91,6 +92,38 @@ existing private backend. No always-on CPU and no worker service.
   `HTS_JOBS_PUSH_SA_EMAIL`, `HTS_JOBS_DISPATCH_DEADLINE_S`.
 - Plan: `popcre/designflow-frontend` `plan_hts-background-classification.md` (sandbox-albert).
 - Creating queues or changing their IAM for other environments needs Albert's named approval.
+
+### Non-operative RAG review timer: idle CPU qualification
+
+The RAG debate scheduler is an existing in-process sixty-second timer. It is a
+separate, non-operative review path; it does not change the Cloud Tasks
+classification flow above and is not an external Cloud Scheduler callback.
+Its idle execution has not been qualified, and no genuine live acceptance has
+been established.
+
+Source qualification is limited to `lithe-breaker-323913` / `us-east4` /
+`popcre-albert-core-sandbox`. The service must receive instance-based,
+always-allocated CPU through its normal reviewed Cloud Build deployment, using
+the target-only `--no-cpu-throttling` setting. Before deployment, verify the
+existing service has at least 1 vCPU, 512 MiB of memory, and one effective
+minimum instance; the currently observed minimum is 1 and must be retained.
+Preserve those resources, the current execution environment, Cloud Tasks queue,
+OIDC and IAM settings, request timeouts and concurrency, environment variables,
+and secret bindings. Do not change a global deployment default.
+
+After the primary deployment and after **each enabled optional service update**,
+inspect the actual ready revision and effective service settings. Qualification
+requires `run.googleapis.com/cpu-throttling=false` and at least one effective
+minimum instance at every check. A missing CPU annotation or minimum below one
+fails qualification. Preserve and prove the exact source SHA and deployed image,
+and confirm interactive classification still works. These checks qualify only
+the source/runtime wiring; they do not prove idle job execution or authorize
+reviewer activation.
+
+Native direct Muse and Luna access, bounded review runs, and any debate or
+automatic-promotion flag activation each require a separate reviewed action.
+Never borrow another application's provider access, add a scheduler or held
+request, or enable flags as part of runtime qualification.
 
 ## Environments
 
