@@ -6,10 +6,15 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 
 | Path | Purpose |
 |------|---------|
-| [`CLAUDE.md`](CLAUDE.md) | **Full server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
+| [`CLAUDE.md`](CLAUDE.md) | **Full Hetzner/Coolify server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
+| [`HANDOFF.md`](HANDOFF.md) | **Start here for the IaC/backup initiative** — current status, what's done, what's left for next time. Rewritten each session. |
+| [`DECISIONS.md`](DECISIONS.md) | **The *why* log** — every architecture decision, when, and what was rejected. Append-only. |
+| [`designflow-cloud-run.md`](designflow-cloud-run.md) | **Designflow application environment** — Google Cloud Run topology, Cloud Build deployment, BFF/private-service routing, secrets, and operating rules. |
 | [`seafile.md`](seafile.md) | Seafile-specific infrastructure reference for the separate Linode/Caddy deployment at `seafile.designflow.app` |
 | [`runbooks/`](runbooks/) | Step-by-step diagnosis and fix guides for known failure modes |
 | [`post-mortems/`](post-mortems/) | Incident records: what happened, root cause, what was fixed |
+
+> The full host-Ansible + CI build plan lives in [`../ansible/ANSIBLE-IMPLEMENTATION-PLAN.md`](../ansible/ANSIBLE-IMPLEMENTATION-PLAN.md). Backup-system docs live in the `backrest-wiz` repo.
 
 ## Runbooks
 
@@ -17,6 +22,16 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 |---------|-------------|
 | [DNS resolution broken](runbooks/dns-resolution-broken.md) | Apps can't reach external APIs; hostnames don't resolve but IP pings work |
 | [Container resource limits](runbooks/container-resource-limits.md) | Every service must have memory/CPU limits; how to set and verify them |
+
+## Applications on this infrastructure
+
+| Application | Public hostnames | Runtime owner | Notes |
+|-------------|------------------|---------------|-------|
+| PopDAM / PopSG | `dam.designflow.app`, `sg.designflow.app` | Coolify app `qxj8a0j3tpa9lq4q5rs6pezy` on the Hetzner VPS | One `ghcr.io/u2giants/popdam-frontend:latest` image serves both hostnames; `dam` is routed by Coolify Docker labels and `sg` by `/data/coolify/proxy/dynamic/popdam-sg.yml` using the same Docker service. |
+
+When a project-specific infrastructure decision for PopDAM changes VPS, Coolify,
+Traefik, GHCR, DNS, Railway, or Synology operating assumptions, update this
+knowledgebase and the PopDAM repo docs together.
 
 ## Post-Mortems
 
@@ -26,7 +41,7 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | [2026-05-20](post-mortems/2026-05-20-hetzner-crash.md) | Hetzner VPS unclean reboot; HiClaw recursive MinIO mirror (primary) + Twenty email rerouter query storm (contributing) |
 | [2026-05-20](post-mortems/2026-05-20-dns-cascade.md) | hiclaw→Twenty cascade caused DNS failure; Hetzner DNS servers unreachable |
 
-## Server
+## Infrastructure surfaces
 
 Primary application VPS: Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Docker (all apps containerized)
@@ -41,5 +56,6 @@ Primary application VPS: Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 | Service | Host | Deployment model | Reference |
 |---|---|---|---|
 | Seafile / NAS Sync | Linode VPS `172.233.14.233`, hostname `seafile-br` | Docker Compose + Caddy, CI-built GHCR images, manual pull/recreate | [`seafile.md`](seafile.md) |
+| Designflow PLM | Google Cloud Run | Cloud Build → Artifact Registry → Cloud Run | [`designflow-cloud-run.md`](designflow-cloud-run.md) |
 
-Seafile is intentionally **not** a Coolify/Traefik deployment and is not hosted on the Hetzner VPS. Do not apply Hetzner/Coolify assumptions to it without checking the Seafile reference first.
+Seafile is intentionally **not** a Coolify/Traefik deployment and is not hosted on the Hetzner VPS. Do not apply Hetzner/Coolify assumptions to it without checking the Seafile reference first. Designflow PLM is likewise separate from that VPS application stack; use its reference for runtime, deployment, auth, secrets, and environment decisions.

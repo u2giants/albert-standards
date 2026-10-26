@@ -16,6 +16,32 @@ Both NASes are joined to Active Directory. Tailscale is installed on both for re
 
 ---
 
+## PopDAM workload on the NAS
+
+`edgesynology2` runs the PopDAM bridge agent container (`popdam-bridge`) from
+`ghcr.io/u2giants/popdam-bridge:stable`.
+
+What it does:
+- scans the NAS for PopDAM and PopSG source files;
+- generates or defers thumbnails/renders;
+- uploads thumbnails to DigitalOcean Spaces;
+- polls Supabase `agent-api` outward (the cloud does not connect inward to the NAS);
+- verifies Seafile-sourced Helper check-ins after files land on the Synology.
+
+Operational notes:
+- The PopDAM source repo is `u2giants/popdam3`; its reference compose file is
+  `deploy/synology/docker-compose.yml`.
+- Bridge agent self-update is normally triggered from the PopDAM admin UI and
+  pulls `ghcr.io/u2giants/popdam-bridge:stable`.
+- PopDAM file identity uses a sampled `quick_hash`, not a content-unique hash.
+  Do not treat it as globally unique in NAS investigations.
+- Seafile/SeaDrive is a transport layer for remote designers, but Synology
+  receipt is still verified by the bridge agent for Seafile check-ins.
+- If a NAS decision changes bond/NIC/volume/container operating assumptions,
+  update this knowledgebase and the PopDAM docs together.
+
+---
+
 ## NIC map (identical on both units — DS1621xs+)
 
 | Physical port | Interface | Chip | Driver | Speed | Stability |

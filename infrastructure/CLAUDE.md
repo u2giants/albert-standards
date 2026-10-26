@@ -1,5 +1,13 @@
 # Server Infrastructure — designflow.app VPS
 
+Designflow PLM itself is not hosted by this VPS/Coolify stack. The Designflow
+application runtime is Google Cloud Run with Cloud Build/Artifact Registry and a
+public BFF in front of private services. For Designflow app infrastructure,
+deployment, auth, and secrets rules, read
+[`designflow-cloud-run.md`](designflow-cloud-run.md). This file remains the
+reference for the Hetzner VPS, Coolify, Traefik, Cloudflare tunnels, and related
+server runbooks.
+
 ## Overview
 
 This VPS (178.156.180.212) runs Coolify, which manages all deployed applications.
@@ -7,6 +15,79 @@ All apps are reverse-proxied through Traefik (`coolify-proxy` container).
 The domain `designflow.app` uses Cloudflare for DNS, with most subdomains pointing directly at this server and a few using Cloudflare Tunnels.
 
 **Important exception:** `seafile.designflow.app` is not hosted here. It runs on a separate Linode VPS (`172.233.14.233`, hostname `seafile-br`) using Docker Compose + Caddy, with repo-driven GHCR images and manual pull/recreate deployment. Read [`seafile.md`](seafile.md) before making any Seafile, NAS Sync, DNS, or operating-environment decision.
+
+---
+
+## PopDAM / PopSG production app
+
+PopDAM and PopSG are served from the same Coolify-managed frontend container.
+
+| Field | Value |
+|---|---|
+| Public hostnames | `dam.designflow.app`, `sg.designflow.app` |
+| Coolify app UUID | `qxj8a0j3tpa9lq4q5rs6pezy` |
+| Frontend image | `ghcr.io/u2giants/popdam-frontend:latest` |
+| Traefik Docker service | `https-0-qxj8a0j3tpa9lq4q5rs6pezy@docker` |
+| PopDAM repo | `u2giants/popdam3` |
+| Supabase project | `qsllyeztdwjgirsysgai` (Virginia, current production) |
+| Old Supabase project | `ryltkzzernhwnojzouyb` (Ohio, decommissioned/frozen; do not use for live data) |
+| Railway worker | `apps/worker/`, auto-deploys from every push to `main` |
+
+### Routing model
+
+- `dam.designflow.app` is routed by Coolify's Docker labels on the
+  `popdam-frontend` app.
+- `sg.designflow.app` is routed by the Traefik file provider at
+  `/data/coolify/proxy/dynamic/popdam-sg.yml`, using the `@docker` service
+  reference above.
+- The frontend container is a static nginx server. It has no runtime env vars;
+  Supabase URL/anon key are baked into the bundle by source code.
+- The app switches PopDAM/PopSG mode by hostname at runtime. Do not split this
+  into two Coolify apps unless the PopDAM repo explicitly changes that design.
+
+### Deployment ownership
+
+Normal frontend path:
+
+1. Push to `main` in `u2giants/popdam3`.
+2. GitHub Actions `publish-frontend.yml` builds the Vite app and Docker image.
+3. The workflow pushes `latest`, `sha-<short-sha>`, and `<short-sha>` tags to
+   GHCR.
+4. The workflow calls the Coolify deploy API.
+5. Coolify pulls `ghcr.io/u2giants/popdam-frontend:latest` and recreates the
+   managed container.
+
+Do not use SSH or manual `docker run` for routine PopDAM frontend deploys.
+Coolify owns the app container, labels, health checks, and restart policy.
+
+### PopDAM-specific deployment traps
+
+- GitHub's green `popdam / production` deployment badge can be Railway worker
+  status, not frontend status. Verify the `Publish Frontend Image` workflow,
+  GHCR tags, Coolify deployment record, and live headers/assets for frontend
+  freshness.
+- The frontend GHCR package is user-scoped. If GitHub Actions fails with
+  `permission_denied: write_package`, check the package's "Manage Actions
+  access" for `u2giants/popdam3` or the repo secret `GHCR_PAT`.
+- Coolify pulls private GHCR images using the VPS Docker credential file at
+  `/root/.docker/config.json`. If Coolify logs `unauthorized` during image
+  pull, refresh the VPS GHCR login without recording token values.
+- If both public domains return 502 while the app container is healthy, check
+  `docker logs coolify-proxy` for Docker provider errors. A stale
+  `/var/run/docker.sock` bind mount inside `coolify-proxy` has broken Docker
+  provider discovery before; restarting only `coolify-proxy` refreshed it.
+- The nginx config must listen on IPv4 and IPv6 (`listen 80; listen [::]:80;`)
+  because Coolify's health check may resolve `localhost` to `::1`.
+
+### Break-glass rule
+
+If GHCR/Coolify publishing is blocked during an incident and the shell is
+already on the VPS, a local image rebuild may be used only as break glass:
+build/tag `ghcr.io/u2giants/popdam-frontend:latest`, then recreate only the
+Coolify-managed service from
+`/data/coolify/applications/qxj8a0j3tpa9lq4q5rs6pezy/docker-compose.yaml`.
+Afterward, document the action in `u2giants/popdam3` and repair the normal
+GitHub Actions -> GHCR -> Coolify path.
 
 ---
 
