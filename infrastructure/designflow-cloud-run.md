@@ -66,6 +66,18 @@ must be the backend service `.run.app` URLs, never custom `api.*.designflow.app`
 domains. Custom domains route HTTP correctly but do not work as Cloud Run OIDC
 audiences and have caused repeated Microsoft SSO/login outages.
 
+### Temporary exposed-session containment
+
+The public sandbox BFF checks both incoming user-credential headers against an
+exact SHA-256 session digest before proxying `/api` requests. An active match
+returns 403 `Invalid token`; other sessions, login, CORS, backend JWT verification,
+and health checks retain their existing behavior. Only a digest and the original
+session expiry belong in source; never put a bearer credential in docs or logs.
+The entry stops applying at the original expiry and may then be retired in a
+normal code change. This is targeted incident containment, not a replacement
+session system or a signing-key rotation. Scope and live denial proof are tracked
+in `popcre/designflow-bff#63` and `docs/session-revocation.md` in that repository.
+
 ### Operative background jobs: Cloud Tasks push (HTS classification)
 
 Operative HTS classification work does not continue after its request or run on
