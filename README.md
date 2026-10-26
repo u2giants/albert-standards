@@ -10,6 +10,8 @@ should set up, document, and operate within any new project.
 |------|---------|
 | [NEW-PROJECT-PROMPT.md](NEW-PROJECT-PROMPT.md) | Paste into any AI tool when starting a new project. The AI will ask for required credentials upfront, then set up the full project structure including documentation, CI/CD, and deployment. |
 | [OPTIMIZE-EXISTING-PROJECT-PROMPT.md](OPTIMIZE-EXISTING-PROJECT-PROMPT.md) | Paste when onboarding an AI to an existing project for the first time. Triggers a codebase audit, doc cleanup, and standards alignment pass. |
+| [infrastructure/](infrastructure/) | Shared server and deployment operating references, including the separate Seafile Linode stack. |
+| [synology/](synology/) | Shared NAS hardware, DSM, and runbook knowledgebase used by Seafile NAS sync work. |
 
 ## How to use
 

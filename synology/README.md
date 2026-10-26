@@ -25,6 +25,7 @@ Documentation, troubleshooting history, and operational guides for the two Synol
 | Problem type | Read first |
 |---|---|
 | Network / NIC / bond / link failure | `CLAUDE.md` → NIC section, then `runbooks/network-bond-troubleshooting.md` |
+| Seafile NAS sync drift / inotify / `@eaDir` uploads | `runbooks/seafile-sync-inotify.md` |
 | ShareSync bio errors | `runbooks/sharesync-bio-errors.md` |
 | BTRFS corruption / scrub | `runbooks/btrfs-health.md` |
 | MCP tool timeouts / crashes | `CLAUDE.md` → MCP section |

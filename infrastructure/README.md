@@ -7,6 +7,7 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | Path | Purpose |
 |------|---------|
 | [`CLAUDE.md`](CLAUDE.md) | **Full server reference** — traffic routing, tunnel inventory, Docker DNS architecture, runbooks, "do not touch" rules. Auto-loaded into every Claude Code session on the server. |
+| [`seafile.md`](seafile.md) | Seafile-specific infrastructure reference for the separate Linode/Caddy deployment at `seafile.designflow.app` |
 | [`runbooks/`](runbooks/) | Step-by-step diagnosis and fix guides for known failure modes |
 | [`post-mortems/`](post-mortems/) | Incident records: what happened, root cause, what was fixed |
 
@@ -27,10 +28,18 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 
 ## Server
 
-Hetzner VPS (`178.156.180.212`) running Ubuntu with:
+Primary application VPS: Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Docker (all apps containerized)
 - Coolify (deployment orchestration, owns most containers)
 - Traefik (`coolify-proxy` container, reverse proxies all traffic)
 - Cloudflare Tunnels (3 active: `coolify`, `mcp`, `mcpgw` subdomains)
 - Authentik (`auth.designflow.app`, identity provider)
 - `systemd-resolved` with Cloudflare/Google/Quad9 DNS + fallback
+
+## Separate production stacks
+
+| Service | Host | Deployment model | Reference |
+|---|---|---|---|
+| Seafile / NAS Sync | Linode VPS `172.233.14.233`, hostname `seafile-br` | Docker Compose + Caddy, CI-built GHCR images, manual pull/recreate | [`seafile.md`](seafile.md) |
+
+Seafile is intentionally **not** a Coolify/Traefik deployment and is not hosted on the Hetzner VPS. Do not apply Hetzner/Coolify assumptions to it without checking the Seafile reference first.

@@ -63,6 +63,7 @@ Fetch only the runbook(s) relevant to the current session.
 | Problem | Runbook |
 |---|---|
 | Network / NIC / bond failure / link down / NO-CARRIER | `runbooks/network-bond-troubleshooting.md` |
+| Seafile NAS sync drift / false synchronized state / inotify exhaustion / `@eaDir` uploads | `runbooks/seafile-sync-inotify.md` |
 | ShareSync bio errors | `runbooks/sharesync-bio-errors.md` |
 | BTRFS corruption / scrub | `runbooks/btrfs-health.md` |
 | Drive health / SMART errors | `runbooks/drive-health.md` |
@@ -135,17 +136,17 @@ Links to any runbooks or post-mortems created.
 
 All updates go to:
 - Repo: `u2giants/albert-standards`
-- Token: `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`
 - Base path: `synology/`
 
-Use the GitHub Contents API (PUT) to update files.
+Use the local git checkout or `gh` CLI when available. If you must use the GitHub Contents API, obtain a current token from the operator or an approved secret store at runtime. Do not paste tokens into docs or commits.
+
 Always GET the file first to retrieve its current SHA — the PUT will fail without it.
 
 ```
 GET  https://api.github.com/repos/u2giants/albert-standards/contents/synology/<file>
 PUT  https://api.github.com/repos/u2giants/albert-standards/contents/synology/<file>
      Body: { "message": "...", "content": "<base64>", "sha": "<current sha>" }
-     Header: Authorization: token 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
+     Header: Authorization: token <runtime token>
 ```
 
 ---
@@ -163,6 +164,7 @@ synology/
 │   └── drive-inventory.md             ← drive models, RAID layout
 ├── runbooks/
 │   ├── network-bond-troubleshooting.md
+│   ├── seafile-sync-inotify.md
 │   ├── sharesync-bio-errors.md
 │   ├── btrfs-health.md
 │   └── drive-health.md
