@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-06-19 — Seafile NAS sync false-synchronized state from inotify exhaustion
+
+**Units affected:** edgesynology1
+**Status:** Ongoing until persistent DSM boot task is verified
+
+### Symptom
+Generic Decor Seafile sync appeared `synchronized` while recent NAS changes were not reliably reflected on the server. `seaf-daemon` logs included `fail to add watch` / `No space left on device`.
+
+### Root cause
+The Synology host inotify watch limit was still the default `fs.inotify.max_user_watches=8192`, far below the live Seafile sync tree size. The four synced worktrees contained roughly 541k directories, most from Synology `@eaDir` metadata trees.
+
+### Fix applied
+Repo code in `u2giants/seafile` was updated so the wrapper writes Seafile-recognized `seafile-ignore.txt`, monitors commit heads, reports inotify health, watches daemon log errors, and uses canary verification instead of restart-as-repair.
+
+### Outcome
+Host limits still need to be raised persistently on `edgesynology1` via DSM Task Scheduler: `fs.inotify.max_user_watches=2097152` and `fs.inotify.max_user_instances=1024`.
+
+### Related
+- `runbooks/seafile-sync-inotify.md`
+- `../infrastructure/seafile.md`
+
+---
+
 ## 2026-05-14 — Aquantia eth0 identified as root cause; bond migration to eth1+eth2
 
 **Units affected:** both

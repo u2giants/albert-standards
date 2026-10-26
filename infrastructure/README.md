@@ -10,6 +10,7 @@ Runbooks and post-mortems for the server infrastructure running Albert's applica
 | [`HANDOFF.md`](HANDOFF.md) | **Start here for the IaC/backup initiative** — current status, what's done, what's left for next time. Rewritten each session. |
 | [`DECISIONS.md`](DECISIONS.md) | **The *why* log** — every architecture decision, when, and what was rejected. Append-only. |
 | [`designflow-cloud-run.md`](designflow-cloud-run.md) | **Designflow application environment** — Google Cloud Run topology, Cloud Build deployment, BFF/private-service routing, secrets, and operating rules. |
+| [`seafile.md`](seafile.md) | Seafile-specific infrastructure reference for the separate Linode/Caddy deployment at `seafile.designflow.app` |
 | [`runbooks/`](runbooks/) | Step-by-step diagnosis and fix guides for known failure modes |
 | [`post-mortems/`](post-mortems/) | Incident records: what happened, root cause, what was fixed |
 
@@ -42,7 +43,7 @@ knowledgebase and the PopDAM repo docs together.
 
 ## Infrastructure surfaces
 
-Hetzner VPS (`178.156.180.212`) running Ubuntu with:
+Primary application VPS: Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Docker (all apps containerized)
 - Coolify (deployment orchestration, owns most containers)
 - Traefik (`coolify-proxy` container, reverse proxies all traffic)
@@ -50,7 +51,11 @@ Hetzner VPS (`178.156.180.212`) running Ubuntu with:
 - Authentik (`auth.designflow.app`, identity provider)
 - `systemd-resolved` with Cloudflare/Google/Quad9 DNS + fallback
 
-Designflow PLM is separate from that VPS application stack. It runs on Google
-Cloud Run via Cloud Build and Artifact Registry. Use
-[`designflow-cloud-run.md`](designflow-cloud-run.md) for Designflow app runtime,
-deployment, auth, secrets, and environment decisions.
+## Separate production stacks
+
+| Service | Host | Deployment model | Reference |
+|---|---|---|---|
+| Seafile / NAS Sync | Linode VPS `172.233.14.233`, hostname `seafile-br` | Docker Compose + Caddy, CI-built GHCR images, manual pull/recreate | [`seafile.md`](seafile.md) |
+| Designflow PLM | Google Cloud Run | Cloud Build → Artifact Registry → Cloud Run | [`designflow-cloud-run.md`](designflow-cloud-run.md) |
+
+Seafile is intentionally **not** a Coolify/Traefik deployment and is not hosted on the Hetzner VPS. Do not apply Hetzner/Coolify assumptions to it without checking the Seafile reference first. Designflow PLM is likewise separate from that VPS application stack; use its reference for runtime, deployment, auth, secrets, and environment decisions.

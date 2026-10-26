@@ -78,6 +78,8 @@ The bond should use **eth1 + eth2 only**. The Aquantia eth0 port must NOT be in 
 | Bond status | `/proc/net/bonding/bond0` |
 | BTRFS device stats | `btrfs device stats /volume1` |
 | DSM package list | `/var/packages/` |
+| Seafile source folders | `/volume1/mac/Decor/Character Licensed`, `/volume1/mac/Decor/Generic Decor`, `/volume1/mac/Art Library`, `/volume1/styleguides` |
+| Synology Docker binary | `/var/packages/ContainerManager/target/usr/bin/docker` |
 
 ---
 
@@ -115,6 +117,8 @@ The bond should use **eth1 + eth2 only**. The Aquantia eth0 port must NOT be in 
 - **md0/md1 show "5 out of 6 mirrors"** on edgesynology2 — this is a kernel reporting artifact for a 5-drive unit. Not a real degraded array.
 - **eth2 may acquire a DHCP IP** if a cable is plugged into it while it's not a bond slave. This is harmless but should be cleared when adding eth2 to the bond.
 - **Tailscale on DSM 7** intentionally disables TUN kernel mode and runs in userspace. This causes higher CPU overhead. DSM Task Scheduler is the correct persistence mechanism for Tailscale.
+- **Synology regenerates `@eaDir` trees.** For Seafile NAS sync, local `@eaDir` folders are expected to reappear. The Seafile ignore file must be named exactly `seafile-ignore.txt`; `.seafile-ignore` is not recognized.
+- **Inotify limits must be persisted via DSM Task Scheduler.** Large Seafile sync trees can exhaust the default watch limit and make `seaf-cli status` look falsely synchronized. Target `fs.inotify.max_user_watches=2097152` and `fs.inotify.max_user_instances=1024` for the current Seafile workload.
 
 ---
 
@@ -141,6 +145,7 @@ Last bio errors observed:
 
 - `issue-history.md` — full chronological issue log (scan, don't ingest)
 - `runbooks/network-bond-troubleshooting.md` — bond/NIC diagnosis steps
+- `runbooks/seafile-sync-inotify.md` — Seafile NAS sync drift, inotify, and ignore-file rules
 - `runbooks/sharesync-bio-errors.md` — how to diagnose and trace bio errors
 - `runbooks/btrfs-health.md` — scrub, check, and interpret BTRFS stats
 - `hardware/nic-reference.md` — full NIC chip details

@@ -14,6 +14,8 @@ This VPS (178.156.180.212) runs Coolify, which manages all deployed applications
 All apps are reverse-proxied through Traefik (`coolify-proxy` container).
 The domain `designflow.app` uses Cloudflare for DNS, with most subdomains pointing directly at this server and a few using Cloudflare Tunnels.
 
+**Important exception:** `seafile.designflow.app` is not hosted here. It runs on a separate Linode VPS (`172.233.14.233`, hostname `seafile-br`) using Docker Compose + Caddy, with repo-driven GHCR images and manual pull/recreate deployment. Read [`seafile.md`](seafile.md) before making any Seafile, NAS Sync, DNS, or operating-environment decision.
+
 ---
 
 ## PopDAM / PopSG production app
