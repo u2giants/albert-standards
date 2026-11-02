@@ -241,3 +241,23 @@ Update this page whenever a Designflow infrastructure decision changes:
 Then update the relevant Designflow repo docs (`AGENTS.md`, `docs/deployment.md`,
 `docs/configuration.md`, or `docs/system-architecture.md`) so future AI sessions
 see both the local implementation detail and this cross-repo standard.
+
+### November 1, 2026: optional wider HTS evidence on Albert's sandbox
+
+Backend [PR #276](https://github.com/popcre/designflow-backend/pull/276) adds a
+sandbox-only Cloud Build opt-in: `_HTS_SCALEDOWN_COMPRESS=true` and
+`_HTS_SCALEDOWN_SECRET=SCALEDOWN_API_KEY_ALBERT_SANDBOX`. The runtime binding is
+`SCALEDOWN_API_KEY`; the credential stays in Secret Manager, with accessor
+permission only for the existing sandbox runtime service account. No credential
+value belongs in a substitution, source file or this reference.
+
+The step accepts only `popcre-albert-core-sandbox` in the existing project and
+`us-east4`, with application environment `sandbox-albert`. Primary deployments
+start the flag false; the opt-in applies the binding and flag together. Up to
+40 archived ruling bodies are compressed within a 25-second absolute budget,
+inside the unchanged 35-second evidence budget. Original bodies and authority
+metadata remain available to independent validation. Failure records a visible
+state and falls back to eight originals. The queue, validators, challenger and
+Jev remain active. Roll back through the same trigger with the opt-in false.
+Production is unchanged. Live evidence and the paired quality measurement belong
+on [backend #254](https://github.com/popcre/designflow-backend/issues/254).
