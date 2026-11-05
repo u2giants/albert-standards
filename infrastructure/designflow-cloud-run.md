@@ -1,6 +1,6 @@
 # Designflow Cloud Run Environment
 
-**Last updated:** 2026-07-20
+**Last updated:** 2026-11-05 (sandbox HTS timing only)
 
 This page records the non-code infrastructure, server, and operating-environment
 standard for the Designflow PLM application. It is the exception to the default
@@ -85,8 +85,16 @@ always-allocated CPU or a worker service.
   itself; there is no `X-User-Authorization` user JWT on these calls.
 - IAM: `deployer@` (backend runtime SA and push SA) holds `roles/cloudtasks.enqueuer`,
   `roles/run.invoker` and `roles/iam.serviceAccountUser` project-wide. No other grants.
-- Timeout rule (tested in the backend): provider turn timeout < job lease <
-  task `dispatchDeadline` (180s) <= Cloud Run request timeout (300s; do not lower below 180s).
+- Sandbox HTS release envelope (2026-11-05): evidence retrieval, including
+  product-phrase preparation, is bounded to 35s; classification is bounded to
+  170s; the outer follow-up is bounded to 30s. Their 235s envelope must fit inside
+  a 240s original job lease with at least 5s remaining margin. The task
+  `dispatchDeadline` is 270s and the Cloud Run request timeout is 300s.
+  Provider admission must still refuse work that cannot fit the remaining
+  original lease after intervening database waits. Sandbox delivery and immutable
+  runtime proof are tracked on [backend #278](https://github.com/popcre/designflow-backend/issues/278).
+  This records the approved sandbox release contract; production promotion and
+  its live proof remain with Uma and are not established by this documentation.
 - Delivery is at-least-once: the DB claim/lease row is the idempotency gate.
 - Backend env: `HTS_JOBS_TASKS_QUEUE`, `HTS_JOBS_TASKS_LOCATION`, `HTS_JOBS_RUN_URL`,
   `HTS_JOBS_PUSH_SA_EMAIL`, `HTS_JOBS_DISPATCH_DEADLINE_S`.
