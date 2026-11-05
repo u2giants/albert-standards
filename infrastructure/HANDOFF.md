@@ -1,5 +1,8 @@
 # Infra Initiative — Handoff / Living Status
 
+> Private address and database-reference literals were preserved in the protected [historical reference](private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 > The current snapshot of the "make the server rebuildable + trustworthy" initiative. **Rewrite the
 > relevant parts each working session.** For the *why* behind choices, see [`DECISIONS.md`](DECISIONS.md).
 > Last updated: **2026-07-22**.
@@ -32,7 +35,7 @@ maintains.
 - **Legacy-backend decommission reminder** scheduled (cloud routine `trig_01Crwkmo2gGLhTNqkNbNu4Qu`,
   fires 2026-07-22 — verifies the Supabase migration first).
 - **Directus migration confirmed complete (2026-07-22).** Supabase `popdam` project
-  (`qsllyeztdwjgirsysgai`) has 132K+ assets, 286K+ style-guide files, active users and daily
+  (`<current-popdam-project-reference>`) has 132K+ assets, 286K+ style-guide files, active users and daily
   scans — fully live on Supabase. Decommission runbook issued; containers/volumes/restic purge
   require manual execution (see ACTION-REQUIRED note below and the notification sent 2026-07-22).
 

@@ -1,5 +1,8 @@
 # AI Agent Entry Point — Synology NAS Systems
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../infrastructure/private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 **This is the single file to give any AI agent at the start of a Synology session.**
 It is AI-agnostic — written for Claude, GPT, Gemini, or any other model.
 
@@ -11,8 +14,8 @@ Two identical Synology DS1621xs+ NAS units used for business file storage and sy
 
 | Hostname | IP | Role |
 |---|---|---|
-| edgesynology1 | 192.168.3.100 | Primary |
-| edgesynology2 | 192.168.3.101 (port 1904) | Secondary |
+| edgesynology1 | <private-network-address> | Primary |
+| edgesynology2 | <private-network-address> (port 1904) | Secondary |
 
 They are connected to each other via Synology Drive ShareSync.
 Both are joined to Active Directory. Both have Tailscale installed for remote access.

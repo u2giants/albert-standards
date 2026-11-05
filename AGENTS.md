@@ -24,6 +24,8 @@ Future sessions should:
 - Agent-initiated **repo creation / bulk push of infra content is blocked** by the permission
   classifier. Commit into existing repos (`albert-standards`, `backrest-wiz`); don't create new ones.
 
+Private historical network/database literals are preserved in [`infrastructure/private-reference-access.md`](infrastructure/private-reference-access.md); use its protected vault reference instead of restoring literals to public docs.
+
 ### Where things live
 - **Backup / backrest system** → `backrest-wiz` repo (`hetzner-producer/`), incl. its `HANDOFF.md`.
 - **Host Ansible + CI build plan** → [`ansible/ANSIBLE-IMPLEMENTATION-PLAN.md`](ansible/ANSIBLE-IMPLEMENTATION-PLAN.md).

@@ -1,5 +1,8 @@
 # Implementation Plan — Host-Layer Ansible + GitHub Actions Apply Pipeline
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../infrastructure/private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 > **You are a fresh AI session with no prior context. Read this entire document before doing
 > anything.** It is the complete brief for turning a hand-built production server into a
 > reproducible, code-managed system. It was written by a previous session that audited the server
@@ -49,7 +52,7 @@ hand. **A descriptive `.md` of the server is NOT the goal — runnable code that
 ## 2. The server you are managing
 
 - **Provider/OS:** Hetzner VPS, **Ubuntu 24.04.4 LTS** ("noble"), 16 GB. Hostname `hetz`.
-- **Public IP:** `178.156.180.212`. **Tailscale IP:** `100.66.37.58`. Domain: `designflow.app`
+- **Public IP:** `178.156.180.212`. **Tailscale IP:** `<private-network-address>`. Domain: `designflow.app`
   (DNS on Cloudflare).
 - **Primary user:** `ai` (has **passwordless sudo**). Also `root`. SSH in as `ai` or `root`.
 - **This is a single server today.** Design the Ansible inventory to scale to N hosts (there is
@@ -208,7 +211,7 @@ These three roles can take the box down. They are **gated to Phase 2** (see §9)
 on a throwaway host before they ever touch prod.
 
 - **`firewall` — can lock you out of SSH. Highest practical risk.**
-  - Your out-of-band lifeline is **Tailscale** (`100.66.37.58`). Every templated ruleset MUST keep
+  - Your out-of-band lifeline is **Tailscale** (`<private-network-address>`). Every templated ruleset MUST keep
     the `tailscale0` interface and SSH open. Assert this in the role before applying.
   - Staged flow: capture current rules → template them → `--check`/`--diff` → **verify Tailscale +
     SSH reachability** → only then apply.

@@ -1,5 +1,8 @@
 # Post-Mortem: Cloudflared + OAuth2 Proxy Container Recovery — 2026-05-21
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 ## Summary
 
 Following the 2026-05-20 DNS cascade (see [2026-05-20-dns-cascade.md](2026-05-20-dns-cascade.md)), three Docker containers that required DNS at startup were stuck in crash loops or manually stopped: both Cloudflare tunnel containers for `mcp.designflow.app` / `mcpgw.designflow.app`, and the OAuth2 Proxy for `claw.designflow.app`. The `cloudflared-coolify` systemd service had also been left disabled. Additionally, an orphan systemd `cloudflared.service` and its corresponding defunct Cloudflare tunnel were discovered and cleaned up, and structural DNS hardening was applied to Docker itself.
@@ -63,18 +66,18 @@ The three containers fail differently on startup:
 
 ## What Was Deliberately Left Alone
 
-- **`socks5-home-tunnel.service`** — remains disabled. Tailscale peer at `100.110.219.31` was unreachable as of 2026-05-20 20:36. Nothing depends on it. Re-enable only after confirming Tailscale connectivity.
+- **`socks5-home-tunnel.service`** — remains disabled. Tailscale peer at `<private-network-address>` was unreachable as of 2026-05-20 20:36. Nothing depends on it. Re-enable only after confirming Tailscale connectivity.
 - **Coolify-managed cloudflared containers** — DNS hardening was NOT applied inside Coolify's service config because Coolify reconciliation would fight manual container changes. Mitigated by the resolved-level fix which applies to all containers automatically.
 
 ## Follow-up: Incomplete fix discovered 2026-05-26
 
-The fallback-dns.conf fix above was **not fully effective** because Tailscale DNS was still enabled (`tailscale set --accept-dns=true` is the default). When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `100.100.100.100`. Docker 27+ reads this as the real upstream and injects `100.100.100.100` as `ExtServers` for all containers — overriding the fallback-dns fix.
+The fallback-dns.conf fix above was **not fully effective** because Tailscale DNS was still enabled (`tailscale set --accept-dns=true` is the default). When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `<private-network-address>`. Docker 27+ reads this as the real upstream and injects `<private-network-address>` as `ExtServers` for all containers — overriding the fallback-dns fix.
 
 After the May 2026 DNS incident, Tailscale's resolver had no upstream configured (a persistent bug: `no upstream resolvers set, returning SERVFAIL`). This generated 130+ SERVFAIL errors per second and caused all container DNS queries to fail silently — the synology-monitor containers were in a tight retry loop resolving their Supabase hostname, flooding the broken resolver continuously from 2026-05-20 through 2026-05-26.
 
 **Additional fix applied 2026-05-26:**
 - Ran `tailscale set --accept-dns=false` — Tailscale no longer manages system DNS
-- Restarted all 14 running containers to flush the stale `100.100.100.100` ExtServer config
+- Restarted all 14 running containers to flush the stale `<private-network-address>` ExtServer config
 - Containers now use `host(127.0.0.53)` → systemd-resolved → 1.1.1.1 (working)
 - MagicDNS (`.tail769aaf.ts.net` hostname resolution) is intentionally disabled as a result; use Tailscale IPs directly
 

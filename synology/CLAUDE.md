@@ -1,5 +1,8 @@
 # Synology NAS — Session Reference
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../infrastructure/private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 **Read this file at the start of every session involving these NASes.**
 Then consult `issue-history.md` (scan only — do not ingest the whole file) to check if the current problem has been seen before.
 
@@ -9,8 +12,8 @@ Then consult `issue-history.md` (scan only — do not ingest the whole file) to 
 
 | Hostname | IP | Model | Uptime pattern |
 |---|---|---|---|
-| edgesynology1 | 192.168.3.100 | DS1621xs+ | Stable |
-| edgesynology2 | 192.168.3.101 port 1904 | DS1621xs+ | Rebooted more frequently |
+| edgesynology1 | <private-network-address> | DS1621xs+ | Stable |
+| edgesynology2 | <private-network-address> port 1904 | DS1621xs+ | Rebooted more frequently |
 
 Both NASes are joined to Active Directory. Tailscale is installed on both for remote access.
 
@@ -56,7 +59,7 @@ The bond should use **eth1 + eth2 only**. The Aquantia eth0 port must NOT be in 
 - eth0: excluded from bond, no IP, cable unplugged or unused
 - eth1: bond slave
 - eth2: bond slave
-- bond0: carries the NAS IP (192.168.3.100 / .101)
+- bond0: carries the NAS IP (<private-network-address> / .101)
 
 **Why eth0 is excluded:** The Aquantia AQC107 `atlantic` driver on DSM spontaneously drops link. This has been observed on both units causing ShareSync `bio error` entries and network instability. Intel i210 ports are rock solid.
 
