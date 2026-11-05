@@ -1,5 +1,8 @@
 # Server Infrastructure — designflow.app VPS
 
+> Private address and database-reference literals were preserved in the protected [historical reference](private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 Designflow PLM itself is not hosted by this VPS/Coolify stack. The Designflow
 application runtime is Google Cloud Run with Cloud Build/Artifact Registry and a
 public BFF in front of private services. For Designflow app infrastructure,
@@ -29,8 +32,8 @@ PopDAM and PopSG are served from the same Coolify-managed frontend container.
 | Frontend image | `ghcr.io/u2giants/popdam-frontend:latest` |
 | Traefik Docker service | `https-0-qxj8a0j3tpa9lq4q5rs6pezy@docker` |
 | PopDAM repo | `u2giants/popdam3` |
-| Supabase project | `qsllyeztdwjgirsysgai` (Virginia, current production) |
-| Old Supabase project | `ryltkzzernhwnojzouyb` (Ohio, decommissioned/frozen; do not use for live data) |
+| Supabase project | `<current-popdam-project-reference>` (Virginia, current production) |
+| Old Supabase project | `<retired-popdam-project-reference>` (Ohio, decommissioned/frozen; do not use for live data) |
 | Railway worker | `apps/worker/`, auto-deploys from every push to `main` |
 
 ### Routing model
@@ -256,7 +259,7 @@ This is what happened in the May 2026 incident: host DNS broke → Docker DNS re
    Per-container DNS bypasses the Docker relay entirely. Critical because oauth2-proxy must resolve `auth.designflow.app` at every startup to perform OIDC discovery — if this fails, the container exits immediately with code 1. Applied 2026-05-21.
 
 4. **Tailscale DNS disabled** (`tailscale set --accept-dns=false`, applied 2026-05-26):
-   When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `100.100.100.100` (Tailscale's magic DNS address). Docker reads this as the `ExtServer` for all containers — overriding the fallback-dns fix from layer 2. After the May 2026 DNS incident, Tailscale's resolver had no upstream configured and was returning SERVFAIL for every query at 130+ errors/second. This broke all container DNS silently for 6 days despite the May 21 remediation. Disabling Tailscale DNS management means systemd-resolved handles DNS normally, and Docker reads the real upstream (1.1.1.1) instead of `100.100.100.100`. All containers were restarted on 2026-05-26 to flush the stale ExtServer config.
+   When Tailscale DNS is enabled, it intercepts all system DNS and routes it through its internal resolver at `<private-network-address>` (Tailscale's magic DNS address). Docker reads this as the `ExtServer` for all containers — overriding the fallback-dns fix from layer 2. After the May 2026 DNS incident, Tailscale's resolver had no upstream configured and was returning SERVFAIL for every query at 130+ errors/second. This broke all container DNS silently for 6 days despite the May 21 remediation. Disabling Tailscale DNS management means systemd-resolved handles DNS normally, and Docker reads the real upstream (1.1.1.1) instead of `<private-network-address>`. All containers were restarted on 2026-05-26 to flush the stale ExtServer config.
    **MagicDNS is intentionally disabled on this server.** Tailscale peer hostnames (`.tail769aaf.ts.net`) are not resolvable by name. Use Tailscale IPs directly.
 
 **Docker daemon live-restore** (`/etc/docker/daemon.json`): `"live-restore": true` — containers survive Docker daemon restarts/upgrades without going down. Applied 2026-05-21.
@@ -309,7 +312,7 @@ To add an allowed user: add their email to `/worksp/hiclaw/oauth2-proxy/allowed-
 
 **Service:** `socks5-home-tunnel.service` (systemd, currently **disabled**)
 **What it does:** SSH dynamic forward (`-D 0.0.0.0:1080`) to a home machine via Tailscale
-**Target:** Tailscale peer at `100.110.219.31`
+**Target:** Tailscale peer at `<private-network-address>`
 **Run as:** user `ai`
 
 This is an SSH SOCKS5 proxy used to route traffic through a home machine. Nothing on the server currently depends on it. It was disabled in May 2026 when the Tailscale peer became unreachable.
@@ -378,7 +381,7 @@ Coolify overwrites `certresolver: letsencrypt-dns` back to `letsencrypt`, which 
 That's the systemd-resolved stub and unreachable from containers. The daemon.json intentionally has no `dns` key; Docker 27+ reads the real upstream from resolved automatically. The fallback DNS is configured in `/etc/systemd/resolved.conf.d/fallback-dns.conf`.
 
 **Do not re-enable Tailscale DNS** (`tailscale set --accept-dns=true`).
-When Tailscale DNS is enabled, all system DNS is routed through Tailscale's internal resolver at `100.100.100.100`, and Docker injects `100.100.100.100` as the `ExtServer` for every container. If Tailscale's resolver loses its upstream configuration — which happened after the May 2026 DNS incident and is not self-healing — all container DNS breaks silently with SERVFAIL. This exact failure mode caused 6 days of broken container DNS (2026-05-20 to 2026-05-26) despite the May 21 remediation work. Tailscale DNS is deliberately disabled on this server. MagicDNS hostname resolution is the only thing lost; use Tailscale IPs directly.
+When Tailscale DNS is enabled, all system DNS is routed through Tailscale's internal resolver at `<private-network-address>`, and Docker injects `<private-network-address>` as the `ExtServer` for every container. If Tailscale's resolver loses its upstream configuration — which happened after the May 2026 DNS incident and is not self-healing — all container DNS breaks silently with SERVFAIL. This exact failure mode caused 6 days of broken container DNS (2026-05-20 to 2026-05-26) despite the May 21 remediation work. Tailscale DNS is deliberately disabled on this server. MagicDNS hostname resolution is the only thing lost; use Tailscale IPs directly.
 
 ---
 

@@ -1,5 +1,8 @@
 # Issue History — Synology NAS
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../infrastructure/private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 **Newest entries at top. Scan by keyword or date — do NOT ingest the full file.**
 
 ---
@@ -50,13 +53,13 @@ Reconfiguration in progress at time of writing. Bond on both units should be eth
 
 ---
 
-## 2026-05-14 — edgesynology2 eth2 acquired unexpected DHCP IP (192.168.0.115)
+## 2026-05-14 — edgesynology2 eth2 acquired unexpected DHCP IP (<private-network-address>)
 
 **Units affected:** edgesynology2
 **Status:** Resolved
 
 ### Symptom
-`ip addr show eth2` on edgesynology2 showed `192.168.0.115/22` on a standalone (non-bonded) interface.
+`ip addr show eth2` on edgesynology2 showed `<private-network-address>/22` on a standalone (non-bonded) interface.
 
 ### Root cause
 eth2 was set to DHCP in DSM and had been uncabled. When a cable was plugged into it during bond investigation work, it acquired a DHCP lease.

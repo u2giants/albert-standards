@@ -1,5 +1,8 @@
 # Runbook: DNS Resolution Broken on Hetzner Server
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 ## Symptoms
 
 - Claude CLI fails: `Could not resolve host: api.anthropic.com`
@@ -18,7 +21,7 @@ getent ahosts api.anthropic.com  # fails
 
 The server uses `systemd-resolved` for DNS. On Hetzner, DHCP or cloud-init can inject Hetzner's IPv6 DNS servers as link-specific resolvers on `eth0`. If those servers become unreachable (IPv6 flap, Hetzner DNS outage), all hostname resolution fails — even if public DNS servers are configured globally.
 
-A second cause: Tailscale DNS being re-enabled. When `tailscale set --accept-dns=true` is run, Tailscale intercepts all system DNS and routes it through its internal resolver at `100.100.100.100`. If that resolver has no upstream configured (a persistent bug triggered by the May 2026 incident), all DNS returns SERVFAIL. Check this first — it's silent and easy to miss.
+A second cause: Tailscale DNS being re-enabled. When `tailscale set --accept-dns=true` is run, Tailscale intercepts all system DNS and routes it through its internal resolver at `<private-network-address>`. If that resolver has no upstream configured (a persistent bug triggered by the May 2026 incident), all DNS returns SERVFAIL. Check this first — it's silent and easy to miss.
 
 ## Diagnosis
 
@@ -45,7 +48,7 @@ resolvectl status
 
 ```bash
 tailscale set --accept-dns=false
-# Then restart all containers to flush the stale 100.100.100.100 ExtServer config:
+# Then restart all containers to flush the stale <private-network-address> ExtServer config:
 docker restart $(docker ps -q)
 ```
 
@@ -105,7 +108,7 @@ As of 2026-05-26, the server has four permanent safeguards:
 1. `/etc/systemd/resolved.conf.d/dns.conf` — sets Cloudflare/Google/Quad9 as global DNS and fallback, independent of what DHCP injects (applied 2026-05-20)
 2. `/etc/netplan/99-custom-dns.yaml` — prevents Hetzner's DHCP from overwriting `eth0` DNS on reboot (applied 2026-05-20)
 3. `dns-watchdog.timer` — runs every 5 minutes, restarts `systemd-resolved` if `google.com` and `cloudflare.com` both fail to resolve, logs to journal (applied 2026-05-20)
-4. `tailscale set --accept-dns=false` — Tailscale DNS is disabled so it cannot override system DNS or inject `100.100.100.100` into Docker container DNS configuration. Do not re-enable. (applied 2026-05-26)
+4. `tailscale set --accept-dns=false` — Tailscale DNS is disabled so it cannot override system DNS or inject `<private-network-address>` into Docker container DNS configuration. Do not re-enable. (applied 2026-05-26)
 
 ## Notes
 

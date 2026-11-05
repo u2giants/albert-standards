@@ -1,5 +1,8 @@
 # Infrastructure Decisions
 
+> Private address and database-reference literals were preserved in the protected [historical reference](private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 An append-only log of the *why* behind how this infrastructure is built. New decisions go at the
 top. Each entry: what we decided, why, and what we rejected. If you're about to change one of these,
 read it first — the rejected options were usually rejected for a real reason.
@@ -29,7 +32,7 @@ serialization with no drift detection.
 stays **check/PR-diff only** until idempotency is clean *and* the risky roles pass a rebuild-and-diff
 on a throwaway host. Phases: (0) observe & scaffold → (1) non-disruptive roles → (2) risky
 live-service roles (firewall/docker/cloudflared) → (3) secrets migration → (4) CI auto-apply.
-Guardrails baked in: firewall changes keep a **Tailscale out-of-band lifeline** (`100.66.37.58`, by
+Guardrails baked in: firewall changes keep a **Tailscale out-of-band lifeline** (`<private-network-address>`, by
 IP — MagicDNS is off) + an **auto-revert timer**; the Docker role is **version-pinned and never
 auto-restarts**; `--check` is **not trusted on prod** for the risky roles (prove on scratch first);
 secrets migrate one at a time with per-secret validation + rollback (seeded inventory table in the plan).

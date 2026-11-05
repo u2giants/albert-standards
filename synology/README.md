@@ -1,13 +1,16 @@
 # Synology NAS Knowledgebase
 
+> Private address and database-reference literals were preserved in the protected [historical reference](../infrastructure/private-reference-access.md) on November 5, 2026. Placeholders below are documentation labels; resolve and verify the live target before operational use.
+
+
 Documentation, troubleshooting history, and operational guides for the two Synology NAS units.
 
 ## Units
 
 | Hostname | IP | Model | Notes |
 |---|---|---|---|
-| edgesynology1 | 192.168.3.100 | DS1621xs+ | Primary unit |
-| edgesynology2 | 192.168.3.101 (port 1904) | DS1621xs+ | Secondary unit; runs the PopDAM bridge agent container (`popdam-bridge`) for NAS scan, thumbnail, upload, and check-in verification work |
+| edgesynology1 | <private-network-address> | DS1621xs+ | Primary unit |
+| edgesynology2 | <private-network-address> (port 1904) | DS1621xs+ | Secondary unit; runs the PopDAM bridge agent container (`popdam-bridge`) for NAS scan, thumbnail, upload, and check-in verification work |
 
 ## Application-specific NAS workloads
 

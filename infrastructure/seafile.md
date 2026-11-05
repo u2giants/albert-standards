@@ -1,6 +1,6 @@
 # Seafile Infrastructure — designflow.app
 
-**Last synced from `u2giants/seafile`:** 2026-06-26
+**Last synced from `u2giants/seafile`:** 2026-11-05
 
 This file is the shared infrastructure reference for POP Creations' Seafile Pro deployment at `seafile.designflow.app`. The canonical implementation and detailed runbooks live in [`u2giants/seafile`](https://github.com/u2giants/seafile); this standards repo records the cross-project operating facts future infrastructure sessions must not miss.
 
@@ -118,3 +118,13 @@ Persist these with a DSM Task Scheduler boot-up task running as root; DSM does n
 ## Update rule
 
 When infrastructure, deployment, DNS, authentication, storage, backup, or NAS operating-environment decisions change in `u2giants/seafile`, update this file in the same work session. The Seafile repo should also keep links back here in `README.md`, `AGENTS.md`, and deployment/configuration docs so future AI sessions know the shared standards exist.
+
+## License capacity and login recovery
+
+The owner supplied an 11-user replacement license on November 5, 2026, expiring October 26, 2027. Installation and live recovery evidence are tracked on [Seafile incident #19](https://github.com/u2giants/seafile/issues/19); consult that issue for the verified deployment outcome.
+
+The ten staff accounts and `nas-sync` service account require eleven seats in total. The service account is the automatic NAS folder-sync identity, not an additional second sync account. Preserve it and staff access; do not migrate automatic sync to the administrator account to hide a capacity problem.
+
+The effective license is `/opt/seafile-data/seafile/seafile-license.txt` on `seafile-br`, mounted as `/shared/seafile/seafile-license.txt` and linked from `/opt/seafile/seafile-license.txt` inside `seafile`. The separate `/opt/seafile-data/seafile-license.txt` is an obsolete nine-user copy. Do not replace the wrong file.
+
+Before replacement/restart, check the supplied license capacity and expiration, compare file hashes without exposing license contents, back up the effective license, and prove that active accounts fit within the replacement capacity. An over-capacity backend can repeatedly refuse startup while the container still reports healthy; Microsoft SSO callback and authenticated library requests then fail. Reinstalling identical license bytes or restarting without correcting capacity does not repair this failure.
